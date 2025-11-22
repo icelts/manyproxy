@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ManyProxy - 登录 (修复版)</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" />
+    <link rel="stylesheet" href="../css/style.css" />
+</head>
+<body class="bg-light">
+    <div class="container">
+        <div class="row justify-content-center align-items-center min-vh-100">
+            <div class="col-md-6 col-lg-4">
+                <div class="card shadow">
+                    <div class="card-body">
+                        <h3 class="card-title text-center mb-4">
+                            <i class="fas fa-server text-primary"></i> ManyProxy
+                        </h3>
+                        <p class="text-center text-muted mb-4">多类型代理平台</p>
+
+                        <form id="login-form">
+                            <div class="mb-3">
+                                <label for="login-username" class="form-label">用户名</label>
+                                <input type="text" class="form-control" id="login-username" value="admin" required />
+                            </div>
+                            <div class="mb-3">
+                                <label for="login-password" class="form-label">密码</label>
+                                <input type="password" class="form-control" id="login-password" value="admin123" required />
+                            </div>
+                            <button type="submit" class="btn btn-primary w-100" id="login-btn">
+                                <i class="fas fa-sign-in-alt"></i> 登录
+                            </button>
+                        </form>
+
+                        <div class="text-center mt-3">
+                            <a href="register.html" class="text-decoration-none">还没有账户？立即注册</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="toast-container position-fixed bottom-0 end-0 p-3">
+        <div id="toast" class="toast" role="alert">
+            <div class="toast-header">
+                <strong class="me-auto">系统消息</strong>
+                <button type="button" class="btn-close" data-bs-dismiss="toast"></button>
+            </div>
+            <div class="toast-body" id="toast-body"></div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // 等待所有依赖加载完成
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('DOM加载完成');
+            
+            // 检查必要的依赖
+            if (typeof bootstrap === 'undefined') {
+                console.error('Bootstrap未加载');
+                alert('页面依赖加载失败，请刷新页面重试');
+                return;
+            }
+            
+            if (typeof fetch === 'undefined') {
+                console.error('Fetch API不支持');
+                alert('浏览器不支持，请升级浏览器');
+                return;
+            }
+            
+            console.log('依赖检查通过，开始初始化...');
+            
+            // 初始化变量
+            const storage = window.sessionStorage;
+            const TOKEN_KEY = 'access_token';
+            const USER_KEY = 'user_info';
+            const form = document.getElementById('login-form');
+            const toastElement = document.getElementById('toast');
+            const toastBody = document.getElementById('toast-body');
+            const loginBtn = document.getElementById('login-btn');
+
+            // Toast提示函数
+            function showToast(message, type = 'info') {
+                console.log(`Toast: ${message} (${type})`);
+                toastBody.textContent = message;
+                toastElement.className = 'toast';
+                toastElement.classList.add(
+                    type === 'success' ? 'bg-success' :
+                    type === 'error' ? 'bg-danger' :
+                    type === 'warning' ? 'bg-warning' : 'bg-info',
+                    type === 'warning' ? 'text-dark' : 'text-white'
+                );
+                
+                try {
+                    new bootstrap.Toast(toastElement).show();
+                } catch (error) {
+                    console.error('Toast显示失败:', error);
+                    alert(message); // 降级到alert
+                }
+            }
+
+            // API请求函数
+            async function apiRequest(endpoint, options = {}) {
+                const url = `http://localhost:8000/api/v1${endpoint}`;
+                const requestConfig = {
+                    headers: {
+                        'Content-Type': 'application/json',
+                        ...options.headers
+                    },
+                    ...options
+                };
+
+                console.log(`API请求: ${options.method || 'GET'} ${url}`);
+                
+                try {
+                    const response = await fetch(url, requestConfig);
+                    const data = await response.json();
+                    
+                    console.log(`API响应: ${response.status}`, data);
+
+                    if (!response.ok) {
+                        const apiError = new Error(data.detail || `HTTP error! status: ${response.status}`);
+                        apiError.status = response.status;
+                        apiError.response = data;
+                        throw apiError;
+                    }
+
+                    return data;
+                } catch (error) {
+                    console.error('API请求失败:', error);
+                    throw error;
+                }
+            }
+
+            // 登录函数
+            async function login(username, password) {
+                return apiRequest('/session/login', {
+                    method: 'POST',
+                    body: JSON.stringify({ username, password })
+                });
+            }
+
+            // 处理登录
+            async function handleLogin(event) {
+                event.preventDefault();
+                console.log('开始处理登录...');
+                
+                const username = document.getElementById('login-username').value.trim();
+                const password = document.getElementById('login-password').value;
+
+                console.log(`登录信息: 用户名=${username}`);
+
+                if (!username || !password) {
+                    showToast('请输入用户名和密码', 'warning');
+                    return;
+                }
+
+                loginBtn.disabled = true;
+                loginBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>登录中...';
+
+                try {
+                    console.log('调用登录API...');
+                    const response = await login(username, password);
+                    
+                    console.log('登录成功，存储token...');
+                    
+                    // 存储登录信息
+                    storage.setItem('username', username);
+                    storage.setItem(TOKEN_KEY, response.token);
+                    storage.setItem('is_admin', (response.user && response.user.is_admin) ? 'true' : 'false');
+                    storage.setItem(USER_KEY, JSON.stringify({ username, token: response.token }));
+
+                    showToast('登录成功', 'success');
+                    console.log(`准备跳转到: ${(response.user && response.user.is_admin) ? 'admin.html' : 'dashboard.html'}`);
+
+                    setTimeout(() => {
+                        window.location.href = (response.user && response.user.is_admin) ? 'admin.html' : 'dashboard.html';
+                    }, 1500);
+
+                } catch (error) {
+                    console.error('登录失败:', error);
+                    showToast(error.message || '登录失败，请检查用户名和密码', 'error');
+                } finally {
+                    loginBtn.disabled = false;
+                    loginBtn.innerHTML = '<i class="fas fa-sign-in-alt"></i> 登录';
+                }
+            }
+
+            // 检查是否已登录
+            function redirectIfAuthenticated() {
+                const token = storage.getItem(TOKEN_KEY);
+                const username = storage.getItem('username');
+                const isAdmin = storage.getItem('is_admin') === 'true';
+
+                console.log(`检查登录状态: token=${!!token}, username=${username}, isAdmin=${isAdmin}`);
+
+                if (token && username) {
+                    console.log('用户已登录，准备跳转...');
+                    window.location.href = isAdmin ? 'admin.html' : 'dashboard.html';
+                }
+            }
+
+            // 绑定事件
+            if (form) {
+                form.addEventListener('submit', handleLogin);
+                console.log('表单事件绑定完成');
+            } else {
+                console.error('找不到登录表单');
+            }
+
+            // 检查登录状态
+            redirectIfAuthenticated();
+            
+            console.log('登录页面初始化完成');
+        });
+    </script>
+    <div id="footer-container"></div>
+    <script src="../components/footer.js"></script>
+</body>
+</html>

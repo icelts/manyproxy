@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ManyProxy - 仪表板</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="../css/style.css" rel="stylesheet">
+</head>
+<body>
+    <!-- 导航栏 -->
+    <div id="navbar-container"></div>
+
+    <!-- 主要内容区域 -->
+    <main class="container mt-4">
+        <h2><i class="fas fa-tachometer-alt"></i> 仪表板</h2>
+        
+        <div class="row mb-4">
+            <div class="col-md-3">
+                <div class="card bg-primary text-white">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between">
+                            <div>
+                                <h4 id="total-proxies">0</h4>
+                                <p class="mb-0">总代理数</p>
+                            </div>
+                            <div class="align-self-center">
+                                <i class="fas fa-globe fa-2x"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card bg-success text-white">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between">
+                            <div>
+                                <h4 id="active-proxies">0</h4>
+                                <p class="mb-0">活跃代理</p>
+                            </div>
+                            <div class="align-self-center">
+                                <i class="fas fa-check-circle fa-2x"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card bg-warning text-white">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between">
+                            <div>
+                                <h4 id="api-keys-count">0</h4>
+                                <p class="mb-0">API密钥</p>
+                            </div>
+                            <div class="align-self-center">
+                                <i class="fas fa-key fa-2x"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card bg-info text-white">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between">
+                            <div>
+                                <h4 id="api-calls">0</h4>
+                                <p class="mb-0">API调用</p>
+                            </div>
+                            <div class="align-self-center">
+                                <i class="fas fa-chart-line fa-2x"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5><i class="fas fa-chart-pie"></i> 代理类型分布</h5>
+                    </div>
+                    <div class="card-body">
+                        <canvas id="proxyChart"></canvas>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5><i class="fas fa-list"></i> 最近活动</h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="recent-activities">
+                            <p class="text-muted">暂无活动记录</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- 页脚 -->
+    <div id="footer-container"></div>
+
+
+    <!-- 提示消息 -->
+    <div class="toast-container position-fixed bottom-0 end-0 p-3">
+        <div id="toast" class="toast" role="alert">
+            <div class="toast-header">
+                <strong class="me-auto">系统消息</strong>
+                <button type="button" class="btn-close" data-bs-dismiss="toast"></button>
+            </div>
+            <div class="toast-body" id="toast-message"></div>
+        </div>
+    </div>
+
+    <!-- JavaScript -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="../js/config.js?v=2"></script>
+    <script src="../js/api.js?v=2"></script>
+    <script src="../js/auth.js?v=2"></script>
+    <script src="../components/navbar.js?v=2"></script>
+    <script src="../js/dashboard.js?v=2"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', async function() {
+            try {
+                await sessionController.ensurePage('dashboard', { redirectTo: 'login.html' });
+            } catch (error) {
+                console.warn('无法访问仪表板页面', error);
+                return;
+            }
+
+            fetch('../components/navbar.html')
+                .then(response => response.text())
+                .then(html => {
+                    document.getElementById('navbar-container').innerHTML = html;
+                    setTimeout(() => {
+                        if (typeof NavbarManager !== 'undefined') {
+                            window.navbarManager = new NavbarManager();
+                            window.navbarManager.setActiveNavigation('dashboard.html');
+                            window.navbarManager.rebindEvents();
+                        }
+                        dashboardManager.loadDashboardData();
+                    }, 100);
+                })
+                .catch(error => {
+                    console.error('加载导航栏失败:', error);
+                    dashboardManager.loadDashboardData();
+                });
+        });
+
+        // 简化toast函数
+        function showToast(message, type = 'info') {
+            const toast = document.getElementById('toast');
+            const toastMessage = document.getElementById('toast-message');
+            
+            toastMessage.textContent = message;
+            
+            // 设置toast样式
+            toast.className = 'toast';
+            switch (type) {
+                case 'success':
+                    toast.classList.add('bg-success', 'text-white');
+                    break;
+                case 'error':
+                    toast.classList.add('bg-danger', 'text-white');
+                    break;
+                case 'warning':
+                    toast.classList.add('bg-warning', 'text-dark');
+                    break;
+                default:
+                    toast.classList.add('bg-info', 'text-white');
+            }
+            
+            const bsToast = new bootstrap.Toast(toast);
+            bsToast.show();
+        }
+    </script>
+    <script src="../components/footer.js"></script>
+</body>
+</html>

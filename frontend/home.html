@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title data-i18n="home.title">ManyProxy - 专业代理服务平台</title>
+    
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <!-- Custom CSS -->
+    <link href="css/style.css" rel="stylesheet">
+    
+    <style>
+        .hero-section {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 100px 0 80px;
+        }
+        
+        .feature-card {
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            height: 100%;
+        }
+        
+        .feature-card:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+        }
+        
+        .product-card {
+            border: none;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            transition: transform 0.3s ease;
+            height: 100%;
+        }
+        
+        .product-card:hover {
+            transform: translateY(-5px);
+        }
+        
+        .pricing-card {
+            border: none;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            transition: transform 0.3s ease;
+            height: 100%;
+        }
+        
+        .pricing-card.featured {
+            border: 2px solid #007bff;
+            transform: scale(1.05);
+        }
+        
+        .pricing-card:hover {
+            transform: translateY(-5px);
+        }
+        
+        .lang-switcher {
+            cursor: pointer;
+            padding: 5px 10px;
+            border-radius: 5px;
+            transition: background-color 0.3s ease;
+        }
+        
+        .lang-switcher:hover {
+            background-color: rgba(255,255,255,0.1);
+        }
+        
+        .lang-switcher.active {
+            background-color: rgba(255,255,255,0.2);
+        }
+        
+        .footer {
+            background-color: #2c3e50;
+            color: white;
+            padding: 50px 0 30px;
+        }
+        
+        .footer a {
+            color: #ecf0f1;
+            text-decoration: none;
+            transition: color 0.3s ease;
+        }
+        
+        .footer a:hover {
+            color: #3498db;
+        }
+        
+        .navbar-brand {
+            font-weight: bold;
+            font-size: 1.5rem;
+        }
+        
+        .btn-gradient {
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            border: none;
+            color: white;
+            padding: 12px 30px;
+            border-radius: 25px;
+            transition: transform 0.3s ease;
+        }
+        
+        .btn-gradient:hover {
+            transform: translateY(-2px);
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <!-- 导航栏 -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
+        <div class="container">
+            <a class="navbar-brand" href="home.html">
+                <i class="fas fa-server"></i> ManyProxy
+            </a>
+            
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item">
+                        <a class="nav-link active" href="home.html" data-i18n="nav.home">首页</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#products" data-i18n="nav.products">产品</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#pricing" data-i18n="nav.pricing">价格</a>
+                    </li>
+                </ul>
+                
+                <ul class="navbar-nav">
+                    <!-- 语言切换 -->
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" id="langDropdown" role="button" data-bs-toggle="dropdown">
+                            <i class="fas fa-globe"></i> <span data-i18n="nav.language">语言</span>
+                        </a>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item lang-switcher" href="#" data-lang="zh">中文</a></li>
+                            <li><a class="dropdown-item lang-switcher" href="#" data-lang="en">English</a></li>
+                        </ul>
+                    </li>
+                    
+                    <!-- 用户菜单 -->
+                    <li class="nav-item">
+                        <a class="nav-link" href="pages/login.html" data-i18n="nav.login">登录</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="pages/register.html" data-i18n="nav.register">注册</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <!-- 主要内容 -->
+    <main>
+        <!-- Hero Section -->
+        <section class="hero-section">
+            <div class="container text-center">
+                <h1 class="display-4 fw-bold mb-4" data-i18n="home.title">ManyProxy - 专业代理服务平台</h1>
+                <p class="lead mb-5" data-i18n="home.subtitle">提供静态代理、动态代理、移动代理等多种代理服务</p>
+                <div class="d-flex justify-content-center gap-3">
+                    <a href="pages/register.html" class="btn btn-light btn-lg" data-i18n="btn.get_started">开始使用</a>
+                    <a href="#products" class="btn btn-outline-light btn-lg" data-i18n="btn.learn_more">了解更多</a>
+                </div>
+            </div>
+        </section>
+
+        <!-- Features Section -->
+        <section class="py-5">
+            <div class="container">
+                <div class="text-center mb-5">
+                    <h2 class="display-5 fw-bold" data-i18n="home.features.title">我们的优势</h2>
+                </div>
+                
+                <div class="row g-4">
+                    <div class="col-md-6 col-lg-3">
+                        <div class="card feature-card text-center p-4">
+                            <div class="mb-3">
+                                <i class="fas fa-shield-alt fa-3x text-primary"></i>
+                            </div>
+                            <h4 data-i18n="home.features.stability.title">高稳定性</h4>
+                            <p class="text-muted" data-i18n="home.features.stability.desc">99.9%在线保证，24/7技术支持</p>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-6 col-lg-3">
+                        <div class="card feature-card text-center p-4">
+                            <div class="mb-3">
+                                <i class="fas fa-rocket fa-3x text-success"></i>
+                            </div>
+                            <h4 data-i18n="home.features.speed.title">高速连接</h4>
+                            <p class="text-muted" data-i18n="home.features.speed.desc">全球节点，低延迟高速访问</p>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-6 col-lg-3">
+                        <div class="card feature-card text-center p-4">
+                            <div class="mb-3">
+                                <i class="fas fa-lock fa-3x text-warning"></i>
+                            </div>
+                            <h4 data-i18n="home.features.security.title">安全可靠</h4>
+                            <p class="text-muted" data-i18n="home.features.security.desc">加密传输，保护您的隐私安全</p>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-6 col-lg-3">
+                        <div class="card feature-card text-center p-4">
+                            <div class="mb-3">
+                                <i class="fas fa-cogs fa-3x text-info"></i>
+                            </div>
+                            <h4 data-i18n="home.features.easy.title">简单易用</h4>
+                            <p class="text-muted" data-i18n="home.features.easy.desc">一键配置，支持多种协议</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Products Section -->
+        <section id="products" class="py-5 bg-light">
+            <div class="container">
+                <div class="text-center mb-5">
+                    <h2 class="display-5 fw-bold" data-i18n="nav.products">产品</h2>
+                </div>
+                
+                <div class="row g-4">
+                    <div class="col-md-4">
+                        <div class="card product-card h-100">
+                            <div class="card-body text-center p-4">
+                                <div class="mb-3">
+                                    <i class="fas fa-desktop fa-3x text-primary"></i>
+                                </div>
+                                <h4 data-i18n="products.static.title">静态代理</h4>
+                                <p class="text-muted" data-i18n="products.static.desc">固定IP地址，适合长期稳定使用</p>
+                                <button class="btn btn-primary" data-i18n="btn.buy_now">立即购买</button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-4">
+                        <div class="card product-card h-100">
+                            <div class="card-body text-center p-4">
+                                <div class="mb-3">
+                                    <i class="fas fa-sync fa-3x text-success"></i>
+                                </div>
+                                <h4 data-i18n="products.dynamic.title">动态代理</h4>
+                                <p class="text-muted" data-i18n="products.dynamic.desc">自动轮换IP，适合爬虫和数据采集</p>
+                                <button class="btn btn-success" data-i18n="btn.buy_now">立即购买</button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-4">
+                        <div class="card product-card h-100">
+                            <div class="card-body text-center p-4">
+                                <div class="mb-3">
+                                    <i class="fas fa-mobile-alt fa-3x text-warning"></i>
+                                </div>
+                                <h4 data-i18n="products.mobile.title">移动代理</h4>
+                                <p class="text-muted" data-i18n="products.mobile.desc">真实移动网络IP，支持4G/5G网络</p>
+                                <button class="btn btn-warning" data-i18n="btn.buy_now">立即购买</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Pricing Section -->
+        <section id="pricing" class="py-5">
+            <div class="container">
+                <div class="text-center mb-5">
+                    <h2 class="display-5 fw-bold" data-i18n="pricing.title">价格方案</h2>
+                </div>
+                
+                <div class="row g-4 align-items-center">
+                    <div class="col-md-4">
+                        <div class="card pricing-card">
+                            <div class="card-body text-center p-4">
+                                <h4 data-i18n="pricing.basic">基础版</h4>
+                                <h2 class="text-primary">$10<span data-i18n="price.month">/月</span></h2>
+                                <ul class="list-unstyled">
+                                    <li>100个代理</li>
+                                    <li>基础支持</li>
+                                    <li>99%在线率</li>
+                                </ul>
+                                <button class="btn btn-outline-primary w-100" data-i18n="btn.get_started">开始使用</button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-4">
+                        <div class="card pricing-card featured">
+                            <div class="card-body text-center p-4">
+                                <span class="badge bg-primary mb-2">推荐</span>
+                                <h4 data-i18n="pricing.professional">专业版</h4>
+                                <h2 class="text-primary">$50<span data-i18n="price.month">/月</span></h2>
+                                <ul class="list-unstyled">
+                                    <li>1000个代理</li>
+                                    <li>优先支持</li>
+                                    <li>99.9%在线率</li>
+                                    <li>API访问</li>
+                                </ul>
+                                <button class="btn btn-primary w-100" data-i18n="btn.get_started">开始使用</button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-4">
+                        <div class="card pricing-card">
+                            <div class="card-body text-center p-4">
+                                <h4 data-i18n="pricing.enterprise">企业版</h4>
+                                <h2 class="text-primary" data-i18n="pricing.contact">联系销售</h2>
+                                <ul class="list-unstyled">
+                                    <li>无限代理</li>
+                                    <li>专属支持</li>
+                                    <li>99.99%在线率</li>
+                                    <li>定制服务</li>
+                                </ul>
+                                <button class="btn btn-outline-primary w-100" data-i18n="footer.contact">联系我们</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Footer -->
+    <div id="footer-container"></div>
+
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Custom JS -->
+    <script src="js/i18n.js"></script>
+    
+    <script>
+        // 语言切换功能
+        document.addEventListener('DOMContentLoaded', function() {
+            // 初始化国际化
+            i18n.updatePage();
+            
+            // 语言切换事件
+            document.querySelectorAll('.lang-switcher').forEach(btn => {
+                btn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    const lang = this.dataset.lang;
+                    i18n.setLang(lang);
+                });
+            });
+            
+            // 平滑滚动
+            document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+                anchor.addEventListener('click', function (e) {
+                    e.preventDefault();
+                    const target = document.querySelector(this.getAttribute('href'));
+                    if (target) {
+                        target.scrollIntoView({
+                            behavior: 'smooth',
+                            block: 'start'
+                        });
+                    }
+                });
+            });
+            
+            // 导航栏滚动效果
+            window.addEventListener('scroll', function() {
+                const navbar = document.querySelector('.navbar');
+                if (window.scrollY > 50) {
+                    navbar.classList.add('navbar-scrolled');
+                } else {
+                    navbar.classList.remove('navbar-scrolled');
+                }
+            });
+        });
+    </script>
+    
+    <style>
+        .navbar-scrolled {
+            background-color: rgba(33, 37, 41, 0.95) !important;
+            backdrop-filter: blur(10px);
+        }
+    </style>
+    <script src="components/footer.js"></script>
+</body>
+</html>

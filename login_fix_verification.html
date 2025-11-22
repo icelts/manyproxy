@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>登录修复验证</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .verification-section {
+            margin: 20px 0;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background: #f8f9fa;
+        }
+        .status {
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+            font-weight: 500;
+        }
+        .status.success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .status.error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .status.info {
+            background-color: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        .btn-group-custom {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        .token-info {
+            background: #fff;
+            padding: 15px;
+            border-radius: 5px;
+            border: 1px solid #dee2e6;
+            font-family: monospace;
+            font-size: 12px;
+            word-break: break-all;
+        }
+    </style>
+</head>
+<body>
+    <div class="container mt-4">
+        <div class="row">
+            <div class="col-12">
+                <h1 class="text-center mb-4">
+                    <i class="fas fa-check-circle text-success"></i> 
+                    登录修复验证
+                </h1>
+                <p class="text-center text-muted">验证前后端端口配置和登录功能修复</p>
+            </div>
+        </div>
+
+        <!-- 修复摘要 -->
+        <div class="verification-section">
+            <h3><i class="fas fa-tools"></i> 修复摘要</h3>
+            <div class="row">
+                <div class="col-md-6">
+                    <h5>问题诊断</h5>
+                    <ul class="list-unstyled">
+                        <li><i class="fas fa-times text-danger"></i> 前后端端口配置不一致</li>
+                        <li><i class="fas fa-times text-danger"></i> Token过期时间过短（30分钟）</li>
+                        <li><i class="fas fa-times text-danger"></i> 错误处理逻辑问题</li>
+                        <li><i class="fas fa-times text-danger"></i> 页面初始化冲突</li>
+                    </ul>
+                </div>
+                <div class="col-md-6">
+                    <h5>修复措施</h5>
+                    <ul class="list-unstyled">
+                        <li><i class="fas fa-check text-success"></i> 统一端口配置为8000</li>
+                        <li><i class="fas fa-check text-success"></i> 延长Token有效期至24小时</li>
+                        <li><i class="fas fa-check text-success"></i> 优化错误处理逻辑</li>
+                        <li><i class="fas fa-check text-success"></i> 修复页面跳转冲突</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- 服务器状态 -->
+        <div class="verification-section">
+            <h3><i class="fas fa-server"></i> 服务器状态</h3>
+            <div id="server-status" class="status info">检查中...</div>
+            <div class="btn-group-custom">
+                <button onclick="checkServerStatus()" class="btn btn-primary">
+                    <i class="fas fa-sync"></i> 重新检查
+                </button>
+                <button onclick="testHealthEndpoint()" class="btn btn-info">
+                    <i class="fas fa-heartbeat"></i> 健康检查
+                </button>
+            </div>
+        </div>
+
+        <!-- 登录功能测试 -->
+        <div class="verification-section">
+            <h3><i class="fas fa-sign-in-alt"></i> 登录功能测试</h3>
+            <div class="row">
+                <div class="col-md-6">
+                    <h5>管理员登录</h5>
+                    <form id="admin-login-test">
+                        <div class="mb-2">
+                            <input type="text" class="form-control" value="admin" readonly>
+                        </div>
+                        <div class="mb-2">
+                            <input type="password" class="form-control" value="admin123" readonly>
+                        </div>
+                        <button type="submit" class="btn btn-success btn-sm w-100">测试管理员登录</button>
+                    </form>
+                    <div id="admin-result" class="status info mt-2">等待测试...</div>
+                </div>
+                <div class="col-md-6">
+                    <h5>普通用户登录</h5>
+                    <form id="user-login-test">
+                        <div class="mb-2">
+                            <input type="text" class="form-control" value="demo" readonly>
+                        </div>
+                        <div class="mb-2">
+                            <input type="password" class="form-control" value="demo123" readonly>
+                        </div>
+                        <button type="submit" class="btn btn-primary btn-sm w-100">测试用户登录</button>
+                    </form>
+                    <div id="user-result" class="status info mt-2">等待测试...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Token验证 -->
+        <div class="verification-section">
+            <h3><i class="fas fa-key"></i> Token持久性验证</h3>
+            <div id="token-status" class="status info">等待检查...</div>
+            <div id="token-info" class="token-info" style="display: none;"></div>
+            <div class="btn-group-custom">
+                <button onclick="checkTokenPersistence()" class="btn btn-warning">
+                    <i class="fas fa-search"></i> 检查Token
+                </button>
+                <button onclick="validateToken()" class="btn btn-info">
+                    <i class="fas fa-check-double"></i> 验证Token有效性
+                </button>
+                <button onclick="clearAllTokens()" class="btn btn-danger">
+                    <i class="fas fa-trash"></i> 清除Token
+                </button>
+            </div>
+        </div>
+
+        <!-- 实际页面测试 -->
+        <div class="verification-section">
+            <h3><i class="fas fa-external-link-alt"></i> 实际页面测试</h3>
+            <div class="row">
+                <div class="col-md-6">
+                    <h5>前端页面</h5>
+                    <div class="d-grid gap-2">
+                        <a href="frontend/index.html" target="_blank" class="btn btn-outline-primary">
+                            <i class="fas fa-home"></i> 主页/登录页
+                        </a>
+                        <a href="frontend/pages/dashboard.html" target="_blank" class="btn btn-outline-success">
+                            <i class="fas fa-tachometer-alt"></i> 用户仪表板
+                        </a>
+                        <a href="frontend/pages/admin.html" target="_blank" class="btn btn-outline-warning">
+                            <i class="fas fa-cog"></i> 管理员面板
+                        </a>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <h5>API文档</h5>
+                    <div class="d-grid gap-2">
+                        <a href="http://localhost:8000/api/v1/docs" target="_blank" class="btn btn-outline-info">
+                            <i class="fas fa-book"></i> API文档
+                        </a>
+                        <a href="http://localhost:8000/api/v1/redoc" target="_blank" class="btn btn-outline-secondary">
+                            <i class="fas fa-file-alt"></i> ReDoc文档
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 配置信息 -->
+        <div class="verification-section">
+            <h3><i class="fas fa-info-circle"></i> 当前配置信息</h3>
+            <div class="row">
+                <div class="col-md-6">
+                    <h5>服务器配置</h5>
+                    <ul class="list-unstyled">
+                        <li><strong>后端端口:</strong> 8000</li>
+                        <li><strong>前端端口:</strong> 8000 (静态文件)</li>
+                        <li><strong>API地址:</strong> http://localhost:8000/api/v1</li>
+                        <li><strong>Token有效期:</strong> 24小时</li>
+                    </ul>
+                </div>
+                <div class="col-md-6">
+                    <h5>测试账户</h5>
+                    <ul class="list-unstyled">
+                        <li><strong>管理员:</strong> admin / admin123</li>
+                        <li><strong>普通用户:</strong> demo / demo123</li>
+                        <li><strong>数据库:</strong> SQLite (manyproxy.db)</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="frontend/js/config.js"></script>
+    <script>
+        // 检查服务器状态
+        async function checkServerStatus() {
+            const statusDiv = document.getElementById('server-status');
+            statusDiv.className = 'status info';
+            statusDiv.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 检查服务器状态...';
+
+            try {
+                const response = await fetch(config.getBaseURL() + '/session/state');
+                if (response.ok || response.status === 401) {
+                    statusDiv.className = 'status success';
+                    statusDiv.innerHTML = `
+                        <i class="fas fa-check-circle"></i> 
+                        <strong>服务器正常运行</strong><br>
+                        API地址: ${config.getBaseURL()}<br>
+                        状态: ${response.ok ? '已认证' : '未认证（正常）'}
+                    `;
+                } else {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+            } catch (error) {
+                statusDiv.className = 'status error';
+                statusDiv.innerHTML = `
+                    <i class="fas fa-exclamation-triangle"></i> 
+                    <strong>服务器连接失败</strong><br>
+                    错误: ${error.message}<br>
+                    API地址: ${config.getBaseURL()}
+                `;
+            }
+        }
+
+        // 健康检查
+        async function testHealthEndpoint() {
+            try {
+                const response = await fetch(config.getBaseURL().replace('/api/v1', '') + '/health');
+                const data = await response.json();
+                alert(`健康检查结果:\n状态: ${response.ok ? '正常' : '异常'}\n数据: ${JSON.stringify(data, null, 2)}`);
+            } catch (error) {
+                alert(`健康检查失败: ${error.message}`);
+            }
+        }
+
+        // 登录测试
+        async function testLogin(username, password, resultId) {
+            const resultDiv = document.getElementById(resultId);
+            resultDiv.className = 'status info';
+            resultDiv.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 登录中...';
+
+            try {
+                const response = await fetch(config.getBaseURL() + '/session/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    // 保存token
+                    sessionStorage.setItem('token', data.token);
+                    sessionStorage.setItem('username', username);
+                    
+                    resultDiv.className = 'status success';
+                    resultDiv.innerHTML = `
+                        <i class="fas fa-check-circle"></i> 
+                        <strong>登录成功！</strong><br>
+                        用户: ${username}<br>
+                        管理员: ${(data.user && data.user.is_admin) ? '是' : '否'}<br>
+                        Token: ${data.token.substring(0, 30)}...
+                    `;
+                } else {
+                    throw new Error(data.detail || '登录失败');
+                }
+            } catch (error) {
+                resultDiv.className = 'status error';
+                resultDiv.innerHTML = `
+                    <i class="fas fa-times-circle"></i> 
+                    <strong>登录失败</strong><br>
+                    错误: ${error.message}
+                `;
+            }
+        }
+
+        // 检查Token持久性
+        function checkTokenPersistence() {
+            const statusDiv = document.getElementById('token-status');
+            const infoDiv = document.getElementById('token-info');
+            const token = sessionStorage.getItem('token');
+            const username = sessionStorage.getItem('username');
+
+            if (token && username) {
+                statusDiv.className = 'status success';
+                statusDiv.innerHTML = `
+                    <i class="fas fa-check-circle"></i> 
+                    <strong>Token存在且有效</strong><br>
+                    用户: ${username}<br>
+                    长度: ${token.length} 字符
+                `;
+                
+                infoDiv.style.display = 'block';
+                infoDiv.innerHTML = `
+                    <strong>Token详情:</strong><br>
+                    ${token.substring(0, 100)}${token.length > 100 ? '...' : ''}<br>
+                    <small>存储位置: sessionStorage</small>
+                `;
+            } else {
+                statusDiv.className = 'status error';
+                statusDiv.innerHTML = `
+                    <i class="fas fa-times-circle"></i> 
+                    <strong>Token不存在</strong><br>
+                    请先进行登录测试
+                `;
+                infoDiv.style.display = 'none';
+            }
+        }
+
+        // 验证Token有效性
+        async function validateToken() {
+            const token = sessionStorage.getItem('token');
+            if (!token) {
+                alert('没有找到Token，请先登录');
+                return;
+            }
+
+            try {
+                const response = await fetch(config.getBaseURL() + '/session/state', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+
+                if (response.ok) {
+                    const user = await response.json();
+                    alert(`Token验证成功！\n用户: ${user.username}\n管理员: ${user.is_admin}\n余额: ${user.balance}`);
+                } else {
+                    alert('Token无效或已过期');
+                }
+            } catch (error) {
+                alert(`Token验证失败: ${error.message}`);
+            }
+        }
+
+        // 清除所有Token
+        function clearAllTokens() {
+            sessionStorage.clear();
+            localStorage.clear();
+            document.getElementById('token-status').className = 'status info';
+            document.getElementById('token-status').innerHTML = '所有Token已清除';
+            document.getElementById('token-info').style.display = 'none';
+        }
+
+        // 事件监听
+        document.getElementById('admin-login-test').addEventListener('submit', (e) => {
+            e.preventDefault();
+            testLogin('admin', 'admin123', 'admin-result');
+        });
+
+        document.getElementById('user-login-test').addEventListener('submit', (e) => {
+            e.preventDefault();
+            testLogin('demo', 'demo123', 'user-result');
+        });
+
+        // 页面加载时自动检查
+        window.addEventListener('load', () => {
+            checkServerStatus();
+            checkTokenPersistence();
+        });
+    </script>
+</body>
+</html>

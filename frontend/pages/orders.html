@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>我的订单 - ManyProxy</title>
+    <link rel="stylesheet" href="../css/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+    <div id="app">
+        <!-- 导航栏 -->
+        <div id="navbar-container"></div>
+
+        <!-- 主要内容 -->
+        <main class="main-content">
+            <div class="container">
+                <div class="page-header">
+                    <h1><i class="fas fa-shopping-cart"></i> 我的订单</h1>
+                    <p>查看和管理您的所有订单</p>
+                </div>
+
+                <!-- 筛选器 -->
+                <div class="card mb-4">
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-3">
+                                <div class="form-group">
+                                    <label for="orderType">订单类型</label>
+                                    <select id="orderType" class="form-control">
+                                        <option value="">全部类型</option>
+                                        <option value="purchase">购买订单</option>
+                                        <option value="recharge">充值订单</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="form-group">
+                                    <label for="orderStatus">订单状态</label>
+                                    <select id="orderStatus" class="form-control">
+                                        <option value="">全部状态</option>
+                                        <option value="pending">待支付</option>
+                                        <option value="paid">已支付</option>
+                                        <option value="completed">已完成</option>
+                                        <option value="cancelled">已取消</option>
+                                        <option value="refunded">已退款</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="form-group">
+                                    <label for="dateFrom">开始日期</label>
+                                    <input type="date" id="dateFrom" class="form-control">
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="form-group">
+                                    <label for="dateTo">结束日期</label>
+                                    <input type="date" id="dateTo" class="form-control">
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-12">
+                                <button id="filterBtn" class="btn btn-primary">
+                                    <i class="fas fa-filter"></i> 筛选
+                                </button>
+                                <button id="resetBtn" class="btn btn-outline">
+                                    <i class="fas fa-redo"></i> 重置
+                                </button>
+                                <button id="exportBtn" class="btn btn-success">
+                                    <i class="fas fa-download"></i> 导出
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 订单列表 -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3><i class="fas fa-list"></i> 订单列表</h3>
+                        <div class="card-actions">
+                            <span class="text-muted">共 <span id="totalOrders">0</span> 个订单</span>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table">
+                                <thead>
+                                    <tr>
+                                        <th>订单号</th>
+                                        <th>类型</th>
+                                        <th>金额</th>
+                                        <th>状态</th>
+                                        <th>创建时间</th>
+                                        <th>描述</th>
+                                        <th>操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="ordersTableBody">
+                                    <tr>
+                                        <td colspan="7" class="text-center">
+                                            <i class="fas fa-spinner fa-spin"></i> 加载中...
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- 分页 -->
+                        <div class="pagination-container">
+                            <nav>
+                                <ul class="pagination" id="pagination">
+                                    <!-- 分页按钮将在这里生成 -->
+                                </ul>
+                            </nav>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    <div id="footer-container"></div>
+    </div>
+
+    <!-- 订单详情模态框 -->
+    <div id="orderModal" class="modal">
+        <div class="modal-content modal-lg">
+            <div class="modal-header">
+                <h4><i class="fas fa-file-invoice"></i> 订单详情</h4>
+                <span class="close">&times;</span>
+            </div>
+            <div class="modal-body" id="orderModalBody">
+                <!-- 订单详情将在这里显示 -->
+            </div>
+        </div>
+    </div>
+
+    <!-- 支付详情模态框 -->
+    <div id="paymentModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h4><i class="fas fa-credit-card"></i> 支付详情</h4>
+                <span class="close">&times;</span>
+            </div>
+            <div class="modal-body" id="paymentModalBody">
+                <!-- 支付详情将在这里显示 -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast 通知 -->
+    <div id="toast" class="toast"></div>
+
+    <script src="../js/api.js"></script>
+    <script src="../js/auth.js"></script>
+    <script src="../components/navbar.js?v=2"></script>
+    <script>
+        // 加载导航栏
+        document.addEventListener('DOMContentLoaded', function() {
+            // 加载导航栏组件
+            fetch('../components/navbar.html')
+                .then(response => response.text())
+                .then(html => {
+                    document.getElementById('navbar-container').innerHTML = html;
+                    
+                    // 导航栏加载完成后，手动初始化导航栏管理器
+                    setTimeout(() => {
+                        if (typeof NavbarManager !== 'undefined') {
+                            window.navbarManager = new NavbarManager();
+                            // 设置当前页面激活状态
+                            window.navbarManager.setActiveNavigation('orders.html');
+                            // 重新绑定事件（确保退出登录功能正常）
+                            window.navbarManager.rebindEvents();
+                        }
+                    }, 100);
+                })
+                .catch(error => {
+                    console.error('加载导航栏失败:', error);
+                });
+        });
+    </script>
+    <script src="orders.js"></script>
+    <script src="../components/footer.js"></script>
+</body>
+</html>

@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ManyProxy - API密钥</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="../css/style.css" rel="stylesheet">
+</head>
+<body>
+    <!-- 导航栏 -->
+    <div id="navbar-container"></div>
+
+    <!-- 主要内容区域 -->
+    <main class="container mt-4">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2><i class="fas fa-key"></i> API密钥管理</h2>
+            <div>
+                <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createApiKeyModal">
+                    <i class="fas fa-plus"></i> 创建API密钥
+                </button>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>名称</th>
+                                <th>API密钥</th>
+                                <th>速率限制</th>
+                                <th>状态</th>
+                                <th>创建时间</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="api-keys-list">
+                            <tr>
+                                <td colspan="6" class="text-center text-muted">暂无API密钥</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </main>
+    <div id="footer-container"></div>
+
+    <!-- 创建API密钥模态框 -->
+    <div class="modal fade" id="createApiKeyModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">创建API密钥</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="create-api-key-form">
+                        <div class="mb-3">
+                            <label for="api-key-name" class="form-label">密钥名称</label>
+                            <input type="text" class="form-control" id="api-key-name" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="api-key-rate-limit" class="form-label">速率限制（每小时）</label>
+                            <input type="number" class="form-control" id="api-key-rate-limit" min="1" value="1000" required>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-primary" id="confirm-create-api-key">创建</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 提示消息 -->
+    <div class="toast-container position-fixed bottom-0 end-0 p-3">
+        <div id="toast" class="toast" role="alert">
+            <div class="toast-header">
+                <strong class="me-auto">系统消息</strong>
+                <button type="button" class="btn-close" data-bs-dismiss="toast"></button>
+            </div>
+            <div class="toast-body" id="toast-message"></div>
+        </div>
+    </div>
+
+    <!-- JavaScript -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="../js/api.js"></script>
+    <script src="../components/navbar.js?v=2"></script>
+    
+    <script>
+        // 加载导航栏
+        document.addEventListener('DOMContentLoaded', async function() {
+            await sessionController.initialized;
+            if (!sessionController.isAuthenticated()) {
+                window.location.href = 'login.html';
+                return;
+            }
+
+
+            // 加载导航栏组件
+            fetch('../components/navbar.html')
+                .then(response => response.text())
+                .then(html => {
+                    document.getElementById('navbar-container').innerHTML = html;
+                    
+                    // 导航栏加载完成后，手动初始化导航栏管理器
+                    setTimeout(() => {
+                        if (typeof NavbarManager !== 'undefined') {
+                            window.navbarManager = new NavbarManager();
+                            // 设置当前页面激活状态
+                            window.navbarManager.setActiveNavigation('api-keys.html');
+                            // 重新绑定事件（确保退出登录功能正常）
+                            window.navbarManager.rebindEvents();
+                        }
+                        // 初始化API密钥页面
+                        initApiKeysPage();
+                    }, 100);
+                })
+                .catch(error => {
+                    console.error('加载导航栏失败:', error);
+                    // 如果导航栏加载失败，仍然尝试初始化API密钥页面
+                    initApiKeysPage();
+                });
+        });
+
+        // 初始化API密钥页面
+        function initApiKeysPage() {
+            const storage = window.secureStorage || window.sessionStorage;
+            const token = storage.getItem(config.getStorageKey('tokenKey'));
+            
+            if (!token) {
+                window.location.href = 'login.html';
+                return;
+            }
+            
+            loadApiKeys();
+        }
+
+
+        // 加载API密钥列表
+        async function loadApiKeys() {
+            try {
+                const apiKeys = await api.getApiKeys();
+                renderApiKeys(apiKeys);
+            } catch (error) {
+                console.error('加载API密钥失败:', error);
+                document.getElementById('api-keys-list').innerHTML = 
+                    '<tr><td colspan="6" class="text-center text-muted">加载API密钥失败</td></tr>';
+            }
+        }
+
+        // 渲染API密钥列表
+        function renderApiKeys(apiKeys) {
+            const container = document.getElementById('api-keys-list');
+            
+            if (!apiKeys || apiKeys.length === 0) {
+                container.innerHTML = '<tr><td colspan="6" class="text-center text-muted">暂无API密钥</td></tr>';
+                return;
+            }
+
+            container.innerHTML = apiKeys.map(key => `
+                <tr>
+                    <td>${key.name}</td>
+                    <td>
+                        <div class="code-block">${maskApiKey(key.api_key)}</div>
+                        <button class="btn btn-sm btn-outline-secondary mt-1" onclick="copyApiKey('${key.api_key}')">
+                            <i class="fas fa-copy"></i> 复制
+                        </button>
+                    </td>
+                    <td>${key.rate_limit || 1000}/小时</td>
+                    <td>
+                        <span class="badge ${key.is_active ? 'bg-success' : 'bg-danger'}">
+                            ${key.is_active ? '活跃' : '已禁用'}
+                        </span>
+                    </td>
+                    <td>${formatDate(key.created_at)}</td>
+                    <td>
+                        <div class="btn-group btn-group-sm">
+                            <button class="btn btn-outline-warning" onclick="rotateApiKey(${key.id})">
+                                <i class="fas fa-sync"></i> 轮换
+                            </button>
+                            <button class="btn btn-outline-danger" onclick="deleteApiKey(${key.id})">
+                                <i class="fas fa-trash"></i> 删除
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        // 创建API密钥
+        document.getElementById('confirm-create-api-key').addEventListener('click', async function() {
+            const name = document.getElementById('api-key-name').value;
+            const rateLimit = parseInt(document.getElementById('api-key-rate-limit').value);
+            
+            if (!name) {
+                showToast('请输入API密钥名称', 'warning');
+                return;
+            }
+
+            const confirmBtn = this;
+            confirmBtn.disabled = true;
+            confirmBtn.innerHTML = '<span class="loading"></span> 创建中...';
+
+            try {
+                const result = await api.createApiKey(name, rateLimit);
+                
+                showToast('API密钥创建成功！', 'success');
+                
+                // 关闭模态框
+                const modal = bootstrap.Modal.getInstance(document.getElementById('createApiKeyModal'));
+                modal.hide();
+                
+                // 重置表单
+                document.getElementById('create-api-key-form').reset();
+                
+                // 刷新API密钥列表
+                await loadApiKeys();
+                
+                // 显示新创建的API密钥
+                showNewApiKey(result);
+                
+            } catch (error) {
+                console.error('创建API密钥失败:', error);
+                showToast(error.message || '创建API密钥失败', 'error');
+            } finally {
+                confirmBtn.disabled = false;
+                confirmBtn.innerHTML = '创建';
+            }
+        });
+
+        // 轮换API密钥
+        async function rotateApiKey(keyId) {
+            if (!confirm('确定要轮换这个API密钥吗？轮换后旧密钥将失效。')) {
+                return;
+            }
+
+            try {
+                const result = await api.rotateApiKey(keyId);
+                showToast('API密钥已轮换', 'success');
+                await loadApiKeys();
+                showNewApiKey(result);
+            } catch (error) {
+                console.error('轮换API密钥失败:', error);
+                showToast(error.message || '轮换失败', 'error');
+            }
+        }
+
+        // 删除API密钥
+        async function deleteApiKey(keyId) {
+            if (!confirm('确定要删除这个API密钥吗？此操作不可撤销。')) {
+                return;
+            }
+
+            try {
+                await api.deleteApiKey(keyId);
+                showToast('API密钥已删除', 'success');
+                await loadApiKeys();
+            } catch (error) {
+                console.error('删除API密钥失败:', error);
+                showToast(error.message || '删除失败', 'error');
+            }
+        }
+
+        // 复制API密钥
+        function copyApiKey(apiKey) {
+            navigator.clipboard.writeText(apiKey).then(() => {
+                showToast('API密钥已复制到剪贴板', 'success');
+            }).catch(() => {
+                showToast('复制失败，请手动复制', 'error');
+            });
+        }
+
+        // 显示新创建的API密钥
+        function showNewApiKey(apiKeyData) {
+            const modal = document.createElement('div');
+            modal.className = 'modal fade';
+            modal.innerHTML = `
+                <div class="modal-dialog">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">API密钥创建成功</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body">
+                            <p>您的API密钥已创建，请妥善保管：</p>
+                            <div class="code-block">${apiKeyData.api_key}</div>
+                            <div class="alert alert-warning mt-3">
+                                <i class="fas fa-exclamation-triangle"></i>
+                                请立即复制并保存此密钥，出于安全考虑，我们不会再次显示完整密钥。
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-primary" onclick="copyApiKey('${apiKeyData.api_key}')">
+                                <i class="fas fa-copy"></i> 复制密钥
+                            </button>
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            document.body.appendChild(modal);
+            const bsModal = new bootstrap.Modal(modal);
+            bsModal.show();
+            
+            modal.addEventListener('hidden.bs.modal', () => {
+                document.body.removeChild(modal);
+            });
+        }
+
+        // 隐藏API密钥
+        function maskApiKey(apiKey) {
+            if (!apiKey) return '';
+            return apiKey.substring(0, 8) + '****' + apiKey.substring(apiKey.length - 4);
+        }
+
+        // 格式化日期
+        function formatDate(dateString) {
+            if (!dateString) return '-';
+            const date = new Date(dateString);
+            return date.toLocaleDateString('zh-CN') + ' ' + date.toLocaleTimeString('zh-CN', { 
+                hour: '2-digit', 
+                minute: '2-digit' 
+            });
+        }
+
+        // 简化toast函数
+        function showToast(message, type = 'info') {
+            const toast = document.getElementById('toast');
+            const toastMessage = document.getElementById('toast-message');
+            
+            toastMessage.textContent = message;
+            
+            // 设置toast样式
+            toast.className = 'toast';
+            switch (type) {
+                case 'success':
+                    toast.classList.add('bg-success', 'text-white');
+                    break;
+                case 'error':
+                    toast.classList.add('bg-danger', 'text-white');
+                    break;
+                case 'warning':
+                    toast.classList.add('bg-warning', 'text-dark');
+                    break;
+                default:
+                    toast.classList.add('bg-info', 'text-white');
+            }
+            
+            const bsToast = new bootstrap.Toast(toast);
+            bsToast.show();
+        }
+    </script>
+    <script src="../components/footer.js"></script>
+</body>
+</html>

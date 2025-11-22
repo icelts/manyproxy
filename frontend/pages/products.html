@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ManyProxy - 产品购买</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="../css/style.css" rel="stylesheet">
+</head>
+<body>
+    <!-- 导航栏 -->
+    <div id="navbar-container"></div>
+
+    <!-- 主要内容区域 -->
+    <main class="container mt-4">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2><i class="fas fa-shopping-cart"></i> 产品购买</h2>
+            <div>
+                <span class="badge bg-primary fs-6">余额: $<span id="user-balance">0.00</span></span>
+            </div>
+        </div>
+
+        <!-- 产品类别标签页 -->
+        <ul class="nav nav-tabs" id="productTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="static-tab" data-bs-toggle="tab" data-bs-target="#static" type="button">
+                    <i class="fas fa-desktop"></i> 静态代理
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="dynamic-tab" data-bs-toggle="tab" data-bs-target="#dynamic" type="button">
+                    <i class="fas fa-sync"></i> 动态代理
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="mobile-tab" data-bs-toggle="tab" data-bs-target="#mobile" type="button">
+                    <i class="fas fa-mobile-alt"></i> 移动代理
+                </button>
+            </li>
+        </ul>
+
+        <div class="tab-content" id="productTabsContent">
+            <!-- 静态代理产品 -->
+            <div class="tab-pane fade show active" id="static" role="tabpanel">
+                <div class="row mt-4" id="static-products">
+                    <div class="col-12 text-center">
+                        <div class="spinner-border" role="status">
+                            <span class="visually-hidden">加载中...</span>
+                        </div>
+                        <p class="mt-2">正在加载静态代理产品...</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 动态代理产品 -->
+            <div class="tab-pane fade" id="dynamic" role="tabpanel">
+                <div class="row mt-4" id="dynamic-products">
+                    <div class="col-12 text-center">
+                        <div class="spinner-border" role="status">
+                            <span class="visually-hidden">加载中...</span>
+                        </div>
+                        <p class="mt-2">正在加载动态代理产品...</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 移动代理产品 -->
+            <div class="tab-pane fade" id="mobile" role="tabpanel">
+                <div class="row mt-4" id="mobile-products">
+                    <div class="col-12 text-center">
+                        <div class="spinner-border" role="status">
+                            <span class="visually-hidden">加载中...</span>
+                        </div>
+                        <p class="mt-2">正在加载移动代理产品...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- 购买确认模态框 -->
+    <div class="modal fade" id="confirmPurchaseModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">确认购买</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="purchase-details"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-primary" id="confirm-purchase-btn">确认购买</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 页脚 -->
+    <div id="footer-container"></div>
+
+
+    <!-- 提示消息 -->
+    <div class="toast-container position-fixed bottom-0 end-0 p-3">
+        <div id="toast" class="toast" role="alert">
+            <div class="toast-header">
+                <strong class="me-auto">系统消息</strong>
+                <button type="button" class="btn-close" data-bs-dismiss="toast"></button>
+            </div>
+            <div class="toast-body" id="toast-message"></div>
+        </div>
+    </div>
+
+    <!-- JavaScript -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="../js/config.js?v=2"></script>
+    <script src="../js/api.js?v=2"></script>
+    <script src="../js/auth.js?v=2"></script>
+    <script src="../components/navbar.js?v=2"></script>
+    
+    <script>
+        document.addEventListener('DOMContentLoaded', async function() {
+            try {
+                await sessionController.ensurePage('products', { redirectTo: 'login.html' });
+            } catch (error) {
+                console.warn('无法访问产品页面', error);
+                return;
+            }
+
+            fetch('../components/navbar.html')
+                .then(response => response.text())
+                .then(html => {
+                    document.getElementById('navbar-container').innerHTML = html;
+                    
+                    setTimeout(() => {
+                        if (typeof NavbarManager !== 'undefined') {
+                            window.navbarManager = new NavbarManager();
+                            window.navbarManager.setActiveNavigation('products.html');
+                            window.navbarManager.rebindEvents();
+                        }
+                        initProductPage();
+                    }, 100);
+                })
+                .catch(error => {
+                    console.error('加载导航栏失败:', error);
+                    initProductPage();
+                });
+        });
+
+        // 初始化产品页面
+        async function initProductPage() {
+            try {
+                await sessionController.initialized;
+                const userInfo = sessionController.getUser() || await api.getUserInfo();
+                if (userInfo?.is_admin) {
+                    document.getElementById('admin-nav-item').style.display = 'block';
+                }
+                
+                // 更新余额显示
+                document.getElementById('user-balance').textContent = Number(userInfo.balance || 0).toFixed(2);
+                
+            } catch (error) {
+                console.error('获取用户信息失败:', error);
+            }
+            
+            // 加载产品列表
+            productManager.loadProducts();
+        }
+        // 产品管理器
+        const productManager = {
+            products: [],
+            currentCategory: 'static',
+
+            async loadProducts() {
+                try {
+                    const response = await api.get('/proxy/products');
+                    this.products = response;
+                    this.displayProducts();
+                    this.updateBalance();
+                } catch (error) {
+                    console.error('加载产品失败:', error);
+                    this.showError('加载产品失败，请稍后重试');
+                }
+            },
+
+            displayProducts() {
+                const categories = ['static', 'dynamic', 'mobile'];
+                
+                categories.forEach(category => {
+                    const container = document.getElementById(`${category}-products`);
+                    const categoryProducts = this.products.filter(p => p.category === category);
+                    
+                    if (categoryProducts.length === 0) {
+                        container.innerHTML = `
+                            <div class="col-12 text-center">
+                                <p class="text-muted">暂无${this.getCategoryName(category)}产品</p>
+                            </div>
+                        `;
+                        return;
+                    }
+
+                    container.innerHTML = categoryProducts.map(product => this.createProductCard(product)).join('');
+                });
+            },
+
+            createProductCard(product) {
+                return `
+                    <div class="col-md-6 col-lg-4 mb-4">
+                        <div class="card h-100">
+                            <div class="card-header">
+                                <h5 class="card-title mb-0">${product.product_name}</h5>
+                                <span class="badge bg-primary">${this.getCategoryName(product.category)}</span>
+                            </div>
+                            <div class="card-body">
+                                <p class="card-text">${product.description}</p>
+                                <ul class="list-unstyled">
+                                    <li><i class="fas fa-server"></i> 提供商: ${product.provider}</li>
+                                    <li><i class="fas fa-clock"></i> 时长: ${product.duration_days} 天</li>
+                                </ul>
+                            </div>
+                            <div class="card-footer">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <span class="h5 text-primary mb-0">$${product.price}</span>
+                                    <span class="text-muted">每个</span>
+                                </div>
+                                <div class="input-group mb-2">
+                                    <span class="input-group-text">数量</span>
+                                    <input type="number" class="form-control" id="quantity-${product.id}" min="1" value="1" max="100">
+                                    <span class="input-group-text">个</span>
+                                </div>
+                                <div class="d-grid">
+                                    <button class="btn btn-primary" onclick="productManager.purchaseProduct(${product.id})">
+                                        <i class="fas fa-shopping-cart"></i> 购买
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            },
+
+            getCategoryName(category) {
+                const names = {
+                    'static': '静态代理',
+                    'dynamic': '动态代理',
+                    'mobile': '移动代理'
+                };
+                return names[category] || category;
+            },
+
+            async purchaseProduct(productId) {
+                const product = this.products.find(p => p.id === productId);
+                if (!product) return;
+
+                // 获取用户选择的数量
+                const quantityInput = document.getElementById(`quantity-${productId}`);
+                const quantity = parseInt(quantityInput.value) || 1;
+                
+                // 验证数量
+                if (quantity < 1 || quantity > 100) {
+                    this.showError('购买数量必须在1-100之间');
+                    return;
+                }
+
+                // 计算总价
+                const totalPrice = (product.price * quantity).toFixed(2);
+
+                // 显示确认对话框
+                const modal = new bootstrap.Modal(document.getElementById('confirmPurchaseModal'));
+                document.getElementById('purchase-details').innerHTML = `
+                    <h6>${product.product_name}</h6>
+                    <p>${product.description}</p>
+                    <ul class="list-unstyled">
+                        <li><strong>提供商:</strong> ${product.provider}</li>
+                        <li><strong>单价:</strong> $${product.price}</li>
+                        <li><strong>数量:</strong> ${quantity} 个</li>
+                        <li><strong>总价:</strong> $${totalPrice}</li>
+                        <li><strong>时长:</strong> ${product.duration_days} 天</li>
+                    </ul>
+                    <p class="text-warning">请确认您的余额充足（需要 $${totalPrice}）</p>
+                `;
+                
+                document.getElementById('confirm-purchase-btn').onclick = async () => {
+                    await this.confirmPurchase(product, quantity);
+                    modal.hide();
+                };
+                
+                modal.show();
+            },
+
+            async confirmPurchase(product, quantity) {
+                try {
+                    let response;
+                    
+                    if (product.category === 'static') {
+                        response = await api.post('/proxy/static/buy', {
+                            provider: product.provider.toLowerCase(),
+                            quantity: quantity,
+                            protocol: 'http',
+                            username: 'user',
+                            password: 'pass'
+                        });
+                    } else if (product.category === 'dynamic') {
+                        response = await api.post('/proxy/dynamic/buy', {
+                            duration_days: product.duration_days,
+                            quantity: quantity
+                        });
+                    } else if (product.category === 'mobile') {
+                        // 移动代理暂时不支持批量购买，每次只买1个
+                        if (quantity > 1) {
+                            this.showError('移动代理暂时只支持单个购买');
+                            return;
+                        }
+                        response = await api.post('/proxy/mobile/buy', {
+                            package_id: product.id
+                        });
+                    }
+
+                    this.showSuccess(`成功购买 ${quantity} 个${product.product_name}！订单正在处理中`);
+                    this.updateBalance();
+                    
+                } catch (error) {
+                    console.error('购买失败:', error);
+                    this.showError(error.message || '购买失败，请稍后重试');
+                }
+            },
+
+            async updateBalance() {
+                try {
+                    const userInfo = await api.getUserInfo();
+                    document.getElementById('user-balance').textContent = userInfo.balance.toFixed(2);
+                } catch (error) {
+                    console.error('获取余额失败:', error);
+                }
+            },
+
+            showError(message) {
+                this.showToast(message, 'error');
+            },
+
+            showSuccess(message) {
+                this.showToast(message, 'success');
+            },
+
+            showToast(message, type = 'info') {
+                const toast = document.getElementById('toast');
+                const toastMessage = document.getElementById('toast-message');
+                
+                toastMessage.textContent = message;
+                
+                toast.className = 'toast';
+                switch (type) {
+                    case 'success':
+                        toast.classList.add('bg-success', 'text-white');
+                        break;
+                    case 'error':
+                        toast.classList.add('bg-danger', 'text-white');
+                        break;
+                    case 'warning':
+                        toast.classList.add('bg-warning', 'text-dark');
+                        break;
+                    default:
+                        toast.classList.add('bg-info', 'text-white');
+                }
+                
+                const bsToast = new bootstrap.Toast(toast);
+                bsToast.show();
+            }
+        };
+    </script>
+    <script src="../components/footer.js"></script>
+</body>
+</html>
