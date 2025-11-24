@@ -182,8 +182,17 @@ class API {
         return this.get(`/proxy/dynamic/${orderId}`);
     }
 
+    async getDynamicProxyByToken(token, carrier = 'random', province = '0') {
+        const params = new URLSearchParams({ carrier, province });
+        return this.get(`/proxy/dynamic/token/${token}?${params.toString()}`);
+    }
+
     async resetMobileProxy(orderId) {
         return this.post(`/proxy/mobile/${orderId}/reset`);
+    }
+
+    async resetMobileProxyByToken(token) {
+        return this.post(`/proxy/mobile/token/${token}/reset`);
     }
 
     async getProxyStats() {

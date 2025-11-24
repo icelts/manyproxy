@@ -15,6 +15,7 @@ class NavbarManager {
             return;
         }
 
+        this.applyTranslations();
         this.renderUserInfo();
         sessionController.subscribe(() => this.renderUserInfo());
 
@@ -84,6 +85,28 @@ class NavbarManager {
         } catch (error) {
             console.error('获取余额失败:', error);
         }
+    }
+
+    applyTranslations() {
+        if (window.i18n) {
+            const container = document.getElementById('navbar-container');
+            if (container) {
+                i18n.updatePage(container);
+            } else {
+                i18n.updatePage();
+            }
+            this.updateAuthLabels();
+        }
+    }
+
+    updateAuthLabels() {
+        if (!window.i18n) return;
+        const loginText = i18n.currentLang === 'zh' ? '登录' : 'Login';
+        const registerText = i18n.currentLang === 'zh' ? '注册' : 'Register';
+        const loginLink = document.querySelector('[data-i18n=\"nav.login\"]');
+        const registerLink = document.querySelector('[data-i18n=\"nav.register\"]');
+        if (loginLink) loginLink.textContent = loginText;
+        if (registerLink) registerLink.textContent = registerText;
     }
 }
 

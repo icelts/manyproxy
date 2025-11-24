@@ -1,159 +1,544 @@
-// 国际化支持
+// Simple internationalization helper rebuilt after accidental truncation
 const i18n = {
-    currentLang: localStorage.getItem('language') || 'zh',
-    
+    defaultLang: 'en',
+    currentLang: 'en',
     translations: {
         zh: {
-            // 导航栏
             'nav.home': '首页',
-            'nav.products': '产品',
+            'nav.products': '服务',
             'nav.pricing': '价格',
-            'nav.dashboard': '仪表板',
+            'nav.dashboard': '仪表盘',
             'nav.proxy': '代理管理',
-            'nav.api_keys': 'API密钥',
+            'nav.profile': '个人资料',
+            'nav.recharge': '余额充值',
+            'nav.store': '产品购买',
+            'nav.orders': '我的订单',
             'nav.login': '登录',
             'nav.register': '注册',
             'nav.logout': '退出登录',
             'nav.language': '语言',
-            
-            // 首页
-            'home.title': 'ManyProxy - 专业代理服务平台',
-            'home.subtitle': '提供静态代理、动态代理、移动代理等多种代理服务',
+            'nav.welcome': '用户',
+
+            'footer.description': '专业的代理服务平台，为您提供稳定、灵活、安全的全球代理资源。',
+            'footer.about': '关于',
+            'footer.aboutPlatform': '平台介绍',
+            'footer.aboutSupport': '帮助支持',
+            'footer.links': '链接',
+            'footer.apiDocs': 'API 文档',
+            'footer.privacy': '隐私政策',
+            'footer.terms': '服务条款',
+            'footer.contactTitle': '联系我们',
+            'footer.rights': '© 2024 ManyProxy. 保留所有权利。',
+
+            'home.title': 'ManyProxy - 越南住宅代理服务平台',
+            'home.subtitle': '专注越南静态、动态与移动住宅代理，覆盖 63 省市以及 Viettel / VNPT / FPT 全网节点。',
             'home.features.title': '我们的优势',
             'home.features.stability.title': '高稳定性',
-            'home.features.stability.desc': '99.9%在线保证，24/7技术支持',
+            'home.features.stability.desc': '99.9% 在线保证，7x24 小时技术支持',
             'home.features.speed.title': '高速连接',
             'home.features.speed.desc': '全球节点，低延迟高速访问',
             'home.features.security.title': '安全可靠',
-            'home.features.security.desc': '加密传输，保护您的隐私安全',
+            'home.features.security.desc': '加密传输，保障您的数据安全',
             'home.features.easy.title': '简单易用',
             'home.features.easy.desc': '一键配置，支持多种协议',
-            
-            // 产品介绍
-            'products.static.title': '静态代理',
-            'products.static.desc': '固定IP地址，适合长期稳定使用',
-            'products.dynamic.title': '动态代理',
-            'products.dynamic.desc': '自动轮换IP，适合爬虫和数据采集',
-            'products.mobile.title': '移动代理',
-            'products.mobile.desc': '真实移动网络IP，支持4G/5G网络',
-            
-            // 价格
+            'home.services.title': '服务',
+            'home.services.static.title': '越南静态 IPv4 住宅代理',
+            'home.services.static.feature1': '拒绝作弊流量，长期稳定运行',
+            'home.services.static.feature2': '使用量无限制',
+            'home.services.static.feature3': '适配任意社交网络运营',
+            'home.services.static.feature4': '与 Viettel / VNPT / FPT 签订长期合同',
+            'home.services.dynamic.title': '越南家庭动态住宅代理',
+            'home.services.dynamic.feature1': '主动轮换 API 工具完整支持',
+            'home.services.dynamic.feature2': '无限次 IP 更换',
+            'home.services.dynamic.feature3': '无限带宽',
+            'home.services.dynamic.feature4': '单个 IP 最长 30 分钟',
+            'home.services.dynamic.feature5': '单个 IP 最短 15 分钟',
+            'home.services.dynamic.feature6': '最短 60 秒即可换 IP',
+            'home.services.dynamic.feature7': 'Viettel / VNPT / FPT 三大运营商',
+            'home.services.dynamic.feature8': '覆盖 63 省市住宅 IPv4 基础设施',
+            'home.services.dynamic.feature9': 'HTTPS & SOCKS5 支持',
+            'home.services.mobile.title': '越南移动轮换代理',
+            'home.services.mobile.feature1': '无限次 IP 更换',
+            'home.services.mobile.feature2': '最短 1 分钟 IP 生命周期',
+            'home.services.mobile.feature3': '最短 60 秒 IP 更换时间',
+            'home.services.mobile.feature4': 'Viettel / VNPT / FPT 移动网络',
+            'home.services.mobile.feature5': '63 省市 IPv4 覆盖',
+            'home.services.mobile.feature6': 'HTTPS & SOCKS5 支持',
+
+            'btn.get_started': '开始使用',
+            'btn.learn_more': '了解更多',
+            'btn.buy_now': '立即购买',
+            'btn.view_pricing': '查看价格',
+            'btn.order_now': '立即下单',
+            'price.month': '/月',
+
+            'common.brand': 'ManyProxy',
+            'common.balance': '当前余额',
+            'common.loading': '加载中...',
+            'common.toastTitle': '系统消息',
+            'common.buttons.export': '导出',
+            'common.buttons.filter': '筛选',
+            'common.buttons.reset': '重置',
+            'common.status.pending': '待处理',
+            'common.status.active': '活跃',
+            'common.status.completed': '已完成',
+            'common.noData': '暂无数据',
+            'common.buttons.buy': '购买',
+            'common.time.justNow': '刚刚',
+            'common.time.minutesAgo': '{{count}} 分钟前',
+            'common.time.hoursAgo': '{{count}} 小时前',
+            'common.time.daysAgo': '{{count}} 天前',
+
+            'dashboard.pageTitle': 'ManyProxy - 仪表盘',
+            'dashboard.title': '<i class="fas fa-tachometer-alt"></i> 仪表盘',
+            'dashboard.total': '总代理数',
+            'dashboard.active': '活跃代理',
+            'dashboard.apiKeys': 'API 密钥',
+            'dashboard.apiCalls': 'API 调用',
+            'dashboard.proxyDistribution': '<i class="fas fa-chart-pie"></i> 代理类型分布',
+            'dashboard.recentActivities': '<i class="fas fa-list"></i> 最近活动',
+            'dashboard.noActivities': '暂无活动记录',
+
+            'products.pageTitle': 'ManyProxy - 产品购买',
+            'products.title': '<i class="fas fa-shopping-cart"></i> 产品购买',
+            'products.balance': '余额',
+            'products.tabs.static': '<i class="fas fa-desktop"></i> 静态代理',
+            'products.tabs.dynamic': '<i class="fas fa-sync"></i> 动态代理',
+            'products.tabs.mobile': '<i class="fas fa-mobile-alt"></i> 移动代理',
+            'products.loading': '正在加载产品...',
+            'products.modalTitle': '确认购买',
+            'products.modalCancel': '取消',
+            'products.modalConfirm': '确认购买',
+            'products.toast.loadFailed': '加载产品失败，请稍后再试',
+            'products.emptyCategory': '暂未上架 {{category}} 产品',
+            'products.labels.provider': '提供商',
+            'products.labels.duration': '时长',
+            'products.labels.price': '单价',
+            'products.labels.quantity': '数量',
+            'products.labels.total': '总价',
+            'products.quantity': '数量',
+            'products.unit': '个',
+            'products.toast.invalidQuantity': '购买数量必须在 1-100 之间',
+            'products.balanceWarning': '请确认余额充足（至少 {{amount}}）',
+            'products.toast.creationSuccess': '购买请求创建成功，正在处理中',
+            'products.toast.createFailed': '购买失败，请稍后重试',
+
+            'proxy.pageTitle': 'ManyProxy - 代理管理',
+            'proxy.title': '<i class="fas fa-globe"></i> 代理管理',
+            'proxy.pageDescription': '查看您购买的所有代理，并复制 Token 配合个人 API Key 调用开放接口。',
+            'proxy.tokenNotice': 'Token 仅在此页面显示，请及时保存。',
+            'proxy.tabs.static': '<i class="fas fa-desktop"></i> 静态代理',
+            'proxy.tabs.dynamic': '<i class="fas fa-sync"></i> 动态代理',
+            'proxy.tabs.mobile': '<i class="fas fa-mobile-alt"></i> 移动代理',
+            'proxy.table.order': '订单',
+            'proxy.table.info': '代理信息',
+            'proxy.table.created': '创建时间',
+            'proxy.table.expires': '到期时间',
+            'proxy.table.status': '状态',
+            'proxy.table.token': '产品 Token',
+            'proxy.table.server': '服务节点',
+            'proxy.apiGuide.title': 'API 使用说明',
+            'proxy.apiGuide.description': '请求头携带 <code>X-API-Key</code>（个人资料页复制）并附上 Token，即可调用下列接口。',
+            'proxy.apiGuide.dynamic': '<strong>动态代理</strong>：GET /api/v1/proxy/dynamic/token/{token} 返回新的出口 IP。',
+            'proxy.apiGuide.mobile': '<strong>移动代理</strong>：POST /api/v1/proxy/mobile/token/{token}/reset 重置 IP 并返回结果。',
+            'proxy.apiGuide.dynamicTip': '携带 Token 可直接通过 API 拉取最新动态住宅代理。',
+            'proxy.apiGuide.mobileTip': '移动代理 Token 等同于上游 key_code，可随时请求重置。',
+            'proxy.empty.static': '暂无静态代理',
+            'proxy.empty.dynamic': '暂无动态代理',
+            'proxy.empty.mobile': '暂无移动代理',
+            'proxy.labels.static': '静态代理',
+            'proxy.labels.dynamic': '动态代理',
+            'proxy.labels.mobile': '移动代理',
+            'proxy.labels.username': '用户名',
+            'proxy.labels.password': '密码',
+            'proxy.toast.tokenCopied': 'Token 已复制到剪贴板',
+
+            'profile.pageTitle': 'ManyProxy - 个人资料',
+            'profile.title': '<i class="fas fa-user"></i> 个人资料',
+            'profile.subtitle': '查看与更新账户信息、API 密钥及安全设置。',
+            'profile.accountInfo': '<i class="fas fa-id-card"></i> 账户信息',
+            'profile.username': '用户名',
+            'profile.email': '邮箱',
+            'profile.createdAt': '注册时间',
+            'profile.passwordSection': '<i class="fas fa-key"></i> 修改密码',
+            'profile.currentPassword': '当前密码',
+            'profile.newPassword': '新密码',
+            'profile.confirmPassword': '确认新密码',
+            'profile.passwordHint': '密码长度至少 6 位',
+            'profile.savePassword': '<i class="fas fa-save"></i> 保存密码',
+            'profile.apiSection': '<i class="fas fa-key"></i> API 密钥',
+            'profile.apiCurrent': '当前 API 密钥',
+            'profile.apiPlaceholder': '正在加载...',
+            'profile.regenerate': '<i class="fas fa-sync"></i> 重新生成',
+            'profile.apiAlert': '请妥善保存密钥，系统不会再次显示完整内容。',
+            'profile.apiInfo': 'API 密钥仅供调用 ManyProxy API，请勿泄露。',
+            'profile.modalTitle': '重新生成 API 密钥',
+            'profile.modalBody': '确定要重新生成吗？旧密钥将立即失效。',
+            'profile.modalWarning': '生成后请立即复制并保存新密钥。',
+            'profile.modalCancel': '取消',
+            'profile.modalConfirm': '确认生成',
+
+            'recharge.pageTitle': 'ManyProxy - 余额充值',
+            'recharge.title': '<i class="fas fa-wallet"></i> 余额充值',
+            'recharge.subtitle': '支持多种加密货币，快速为账户充值。',
+            'recharge.amountTitle': '<i class="fas fa-credit-card"></i> 选择充值金额',
+            'recharge.customAmount': '自定义金额',
+            'recharge.customPlaceholder': '输入充值金额',
+            'recharge.paymentMethod': '支付方式',
+            'recharge.cryptoCurrency': '选择加密货币',
+            'recharge.rates': '当前汇率',
+            'recharge.submit': '<i class="fas fa-arrow-right"></i> 立即充值',
+            'recharge.scanTitle': '<i class="fas fa-qrcode"></i> 扫码支付',
+            'recharge.paymentAmount': '充值金额',
+            'recharge.paymentAddress': '付款地址',
+            'recharge.paymentStatus': '支付状态',
+            'recharge.confirmations': '确认数',
+            'recharge.remaining': '剩余时间',
+            'recharge.check': '<i class="fas fa-sync"></i> 检查状态',
+            'recharge.cancel': '<i class="fas fa-times"></i> 取消支付',
+            'recharge.history': '<i class="fas fa-history"></i> 最近充值记录',
+            'recharge.historyEmpty': '暂无充值记录',
+
+            'orders.pageTitle': 'ManyProxy - 我的订单',
+            'orders.title': '<i class="fas fa-shopping-cart"></i> 我的订单',
+            'orders.subtitle': '查看和管理所有订单。',
+            'orders.filters.type': '订单类型',
+            'orders.filters.status': '订单状态',
+            'orders.filters.dateFrom': '开始日期',
+            'orders.filters.dateTo': '结束日期',
+            'orders.filters.allTypes': '全部类型',
+            'orders.filters.allStatus': '全部状态',
+            'orders.filters.purchase': '购买订单',
+            'orders.filters.recharge': '充值订单',
+            'orders.filters.pending': '待支付',
+            'orders.filters.paid': '已支付',
+            'orders.filters.completed': '已完成',
+            'orders.filters.cancelled': '已取消',
+            'orders.filters.refunded': '已退款',
+            'orders.listTitle': '<i class="fas fa-list"></i> 订单列表',
+            'orders.table.number': '订单号',
+            'orders.table.type': '类型',
+            'orders.table.amount': '金额',
+            'orders.table.status': '状态',
+            'orders.table.created': '创建时间',
+            'orders.table.description': '描述',
+            'orders.table.actions': '操作',
+            'orders.details': '<i class="fas fa-file-invoice"></i> 订单详情',
+            'orders.paymentDetails': '<i class="fas fa-credit-card"></i> 支付详情',
+
             'pricing.title': '价格方案',
             'pricing.basic': '基础版',
             'pricing.professional': '专业版',
             'pricing.enterprise': '企业版',
             'pricing.contact': '联系销售',
-            
-            // 底部
-            'footer.copyright': '© 2024 ManyProxy. 保留所有权利。',
-            'footer.contact': '联系我们',
-            'footer.api_docs': 'API文档',
-            'footer.privacy': '隐私政策',
-            'footer.terms': '服务条款',
-            'footer.about': '关于我们',
-            'footer.support': '技术支持',
-            
-            // 通用
-            'btn.get_started': '开始使用',
-            'btn.learn_more': '了解更多',
-            'btn.buy_now': '立即购买',
-            'price.from': '起',
-            'price.month': '/月'
         },
-        
+
         en: {
-            // Navigation
             'nav.home': 'Home',
-            'nav.products': 'Products',
+            'nav.products': 'Services',
             'nav.pricing': 'Pricing',
             'nav.dashboard': 'Dashboard',
             'nav.proxy': 'Proxy Management',
-            'nav.api_keys': 'API Keys',
+            'nav.profile': 'Profile',
+            'nav.recharge': 'Recharge',
+            'nav.store': 'Purchase',
+            'nav.orders': 'Orders',
             'nav.login': 'Login',
             'nav.register': 'Register',
             'nav.logout': 'Logout',
             'nav.language': 'Language',
-            
-            // Home
-            'home.title': 'ManyProxy - Professional Proxy Service Platform',
-            'home.subtitle': 'Providing static proxies, dynamic proxies, mobile proxies and more',
+            'nav.welcome': 'User',
+
+            'footer.description': 'Professional proxy platform delivering stable, flexible and secure global resources.',
+            'footer.about': 'About',
+            'footer.aboutPlatform': 'Platform Overview',
+            'footer.aboutSupport': 'Help & Support',
+            'footer.links': 'Links',
+            'footer.apiDocs': 'API Documentation',
+            'footer.privacy': 'Privacy Policy',
+            'footer.terms': 'Terms of Service',
+            'footer.contactTitle': 'Contact Us',
+            'footer.rights': '© 2024 ManyProxy. All rights reserved.',
+
+            'home.title': 'ManyProxy – Vietnam Residential Proxy Platform',
+            'home.subtitle': 'Vietnam static, dynamic and mobile residential proxies across 63 provinces with Viettel/VNPT/FPT coverage.',
             'home.features.title': 'Our Advantages',
             'home.features.stability.title': 'High Stability',
-            'home.features.stability.desc': '99.9% uptime guarantee, 24/7 technical support',
+            'home.features.stability.desc': '99.9% uptime with 24/7 support',
             'home.features.speed.title': 'High Speed',
-            'home.features.speed.desc': 'Global nodes, low latency high-speed access',
+            'home.features.speed.desc': 'Global nodes, low latency access',
             'home.features.security.title': 'Secure & Reliable',
-            'home.features.security.desc': 'Encrypted transmission, protect your privacy',
+            'home.features.security.desc': 'Encrypted delivery, privacy first',
             'home.features.easy.title': 'Easy to Use',
-            'home.features.easy.desc': 'One-click configuration, support multiple protocols',
-            
-            // Products
-            'products.static.title': 'Static Proxies',
-            'products.static.desc': 'Fixed IP address, suitable for long-term stable use',
-            'products.dynamic.title': 'Dynamic Proxies',
-            'products.dynamic.desc': 'Automatic IP rotation, suitable for crawling and data collection',
-            'products.mobile.title': 'Mobile Proxies',
-            'products.mobile.desc': 'Real mobile network IPs, support 4G/5G networks',
-            
-            // Pricing
+            'home.features.easy.desc': 'One-click configuration, multi-protocol',
+            'home.services.title': 'Services',
+            'home.services.static.title': 'Static Vietnam IPv4 residential proxies',
+            'home.services.static.feature1': 'Say no to cheats, long-term stability',
+            'home.services.static.feature2': 'Unlimited usage capacity',
+            'home.services.static.feature3': 'Works with every social network',
+            'home.services.static.feature4': 'Long-term contracts with Viettel / VNPT / FPT',
+            'home.services.dynamic.title': 'Rotating Vietnam residential proxies',
+            'home.services.dynamic.feature1': 'Active rotation with API tooling',
+            'home.services.dynamic.feature2': 'Unlimited IP changes',
+            'home.services.dynamic.feature3': 'Unlimited bandwidth',
+            'home.services.dynamic.feature4': 'Maximum 30-minute IP life',
+            'home.services.dynamic.feature5': 'Minimum 15-minute IP life',
+            'home.services.dynamic.feature6': 'Minimum 60-second swap time',
+            'home.services.dynamic.feature7': 'Viettel / VNPT / FPT coverage',
+            'home.services.dynamic.feature8': 'IPv4 infrastructure in 63 provinces',
+            'home.services.dynamic.feature9': 'HTTPS & SOCKS5 support',
+            'home.services.mobile.title': 'Rotating Vietnam mobile proxies',
+            'home.services.mobile.feature1': 'Unlimited IP changes',
+            'home.services.mobile.feature2': 'Minimum 1-minute IP lifetime',
+            'home.services.mobile.feature3': 'Minimum 60-second IP change',
+            'home.services.mobile.feature4': 'Viettel / VNPT / FPT LTE coverage',
+            'home.services.mobile.feature5': 'Nationwide IPv4 footprint',
+            'home.services.mobile.feature6': 'HTTPS & SOCKS5 support',
+
+            'btn.get_started': 'Get Started',
+            'btn.learn_more': 'Learn More',
+            'btn.buy_now': 'Buy Now',
+            'btn.view_pricing': 'View Pricing',
+            'btn.order_now': 'Order Now',
+            'price.month': '/month',
+
+            'common.brand': 'ManyProxy',
+            'common.balance': 'Balance',
+            'common.loading': 'Loading...',
+            'common.toastTitle': 'System Message',
+            'common.buttons.export': 'Export',
+            'common.buttons.filter': 'Filter',
+            'common.buttons.reset': 'Reset',
+            'common.status.pending': 'Pending',
+            'common.status.active': 'Active',
+            'common.status.completed': 'Completed',
+            'common.noData': 'No data available',
+            'common.buttons.buy': 'Buy',
+            'common.time.justNow': 'Just now',
+            'common.time.minutesAgo': '{{count}} minutes ago',
+            'common.time.hoursAgo': '{{count}} hours ago',
+            'common.time.daysAgo': '{{count}} days ago',
+
+            'dashboard.pageTitle': 'ManyProxy - Dashboard',
+            'dashboard.title': '<i class="fas fa-tachometer-alt"></i> Dashboard',
+            'dashboard.total': 'Total Proxies',
+            'dashboard.active': 'Active Proxies',
+            'dashboard.apiKeys': 'API Keys',
+            'dashboard.apiCalls': 'API Calls',
+            'dashboard.proxyDistribution': '<i class="fas fa-chart-pie"></i> Proxy Distribution',
+            'dashboard.recentActivities': '<i class="fas fa-list"></i> Recent Activity',
+            'dashboard.noActivities': 'No activity yet',
+
+            'products.pageTitle': 'ManyProxy - Product Purchase',
+            'products.title': '<i class="fas fa-shopping-cart"></i> Purchase Products',
+            'products.balance': 'Balance',
+            'products.tabs.static': '<i class="fas fa-desktop"></i> Static Proxies',
+            'products.tabs.dynamic': '<i class="fas fa-sync"></i> Dynamic Proxies',
+            'products.tabs.mobile': '<i class="fas fa-mobile-alt"></i> Mobile Proxies',
+            'products.loading': 'Loading products...',
+            'products.modalTitle': 'Confirm Purchase',
+            'products.modalCancel': 'Cancel',
+            'products.modalConfirm': 'Confirm Purchase',
+            'products.toast.loadFailed': 'Failed to load products. Please try again later.',
+            'products.emptyCategory': 'No {{category}} products available yet.',
+            'products.labels.provider': 'Provider',
+            'products.labels.duration': 'Duration',
+            'products.labels.price': 'Unit Price',
+            'products.labels.quantity': 'Quantity',
+            'products.labels.total': 'Total',
+            'products.quantity': 'Quantity',
+            'products.unit': 'units',
+            'products.toast.invalidQuantity': 'Quantity must be between 1 and 100.',
+            'products.balanceWarning': 'Please ensure you have at least {{amount}} available.',
+            'products.toast.creationSuccess': 'Purchase created successfully and is being processed.',
+            'products.toast.createFailed': 'Purchase failed. Please try again later.',
+
+            'proxy.pageTitle': 'ManyProxy - Proxy Management',
+            'proxy.title': '<i class="fas fa-globe"></i> Proxy Management',
+            'proxy.pageDescription': 'Review every proxy you own. Copy the token and pair it with your API key to call upstream services.',
+            'proxy.tokenNotice': 'Tokens only appear on this page, copy them immediately.',
+            'proxy.tabs.static': '<i class="fas fa-desktop"></i> Static Proxies',
+            'proxy.tabs.dynamic': '<i class="fas fa-sync"></i> Dynamic Proxies',
+            'proxy.tabs.mobile': '<i class="fas fa-mobile-alt"></i> Mobile Proxies',
+            'proxy.table.order': 'Order',
+            'proxy.table.info': 'Proxy Details',
+            'proxy.table.created': 'Created',
+            'proxy.table.expires': 'Expires',
+            'proxy.table.status': 'Status',
+            'proxy.table.token': 'Product Token',
+            'proxy.table.server': 'Server',
+            'proxy.apiGuide.title': 'API Usage',
+            'proxy.apiGuide.description': 'Send requests with <code>X-API-Key</code> (copied from Profile) and the token to call upstream APIs.',
+            'proxy.apiGuide.dynamic': '<strong>Dynamic proxy</strong>: GET /api/v1/proxy/dynamic/token/{token}?carrier=random&province=0',
+            'proxy.apiGuide.mobile': '<strong>Mobile proxy</strong>: POST /api/v1/proxy/mobile/token/{token}/reset',
+            'proxy.apiGuide.dynamicTip': 'Fetch fresh rotating proxies programmatically.',
+            'proxy.apiGuide.mobileTip': 'Mobile tokens equal upstream key_code for instant resets.',
+            'proxy.empty.static': 'No static proxies yet.',
+            'proxy.empty.dynamic': 'No dynamic proxies yet.',
+            'proxy.empty.mobile': 'No mobile proxies yet.',
+            'proxy.labels.static': 'Static Proxies',
+            'proxy.labels.dynamic': 'Dynamic Proxies',
+            'proxy.labels.mobile': 'Mobile Proxies',
+            'proxy.labels.username': 'Username',
+            'proxy.labels.password': 'Password',
+            'proxy.toast.tokenCopied': 'Token copied to clipboard',
+
+            'profile.pageTitle': 'ManyProxy - Profile',
+            'profile.title': '<i class="fas fa-user"></i> Profile',
+            'profile.subtitle': 'View and update account info, API keys and security settings.',
+            'profile.accountInfo': '<i class="fas fa-id-card"></i> Account Info',
+            'profile.username': 'Username',
+            'profile.email': 'Email',
+            'profile.createdAt': 'Registered At',
+            'profile.passwordSection': '<i class="fas fa-key"></i> Change Password',
+            'profile.currentPassword': 'Current Password',
+            'profile.newPassword': 'New Password',
+            'profile.confirmPassword': 'Confirm Password',
+            'profile.passwordHint': 'Password must be at least 6 characters',
+            'profile.savePassword': '<i class="fas fa-save"></i> Save Password',
+            'profile.apiSection': '<i class="fas fa-key"></i> API Keys',
+            'profile.apiCurrent': 'Current API Key',
+            'profile.apiPlaceholder': 'Loading...',
+            'profile.regenerate': '<i class="fas fa-sync"></i> Regenerate',
+            'profile.apiAlert': 'We will not show the full key again, copy it now.',
+            'profile.apiInfo': 'API keys are only for ManyProxy API calls. Do not share.',
+            'profile.modalTitle': 'Regenerate API Key',
+            'profile.modalBody': 'Regenerate the key? The old one will expire immediately.',
+            'profile.modalWarning': 'Copy the new key right away.',
+            'profile.modalCancel': 'Cancel',
+            'profile.modalConfirm': 'Regenerate',
+
+            'recharge.pageTitle': 'ManyProxy - Balance Recharge',
+            'recharge.title': '<i class="fas fa-wallet"></i> Balance Recharge',
+            'recharge.subtitle': 'Multiple crypto currencies supported for instant recharge.',
+            'recharge.amountTitle': '<i class="fas fa-credit-card"></i> Select Amount',
+            'recharge.customAmount': 'Custom Amount',
+            'recharge.customPlaceholder': 'Enter recharge amount',
+            'recharge.paymentMethod': 'Payment Method',
+            'recharge.cryptoCurrency': 'Select Cryptocurrency',
+            'recharge.rates': 'Current Rates',
+            'recharge.submit': '<i class="fas fa-arrow-right"></i> Recharge Now',
+            'recharge.scanTitle': '<i class="fas fa-qrcode"></i> Scan to Pay',
+            'recharge.paymentAmount': 'Recharge Amount',
+            'recharge.paymentAddress': 'Payment Address',
+            'recharge.paymentStatus': 'Payment Status',
+            'recharge.confirmations': 'Confirmations',
+            'recharge.remaining': 'Remaining Time',
+            'recharge.check': '<i class="fas fa-sync"></i> Check Status',
+            'recharge.cancel': '<i class="fas fa-times"></i> Cancel Payment',
+            'recharge.history': '<i class="fas fa-history"></i> Recent Recharges',
+            'recharge.historyEmpty': 'No recharge records',
+
+            'orders.pageTitle': 'ManyProxy - Orders',
+            'orders.title': '<i class="fas fa-shopping-cart"></i> My Orders',
+            'orders.subtitle': 'View and manage all your orders.',
+            'orders.filters.type': 'Order Type',
+            'orders.filters.status': 'Order Status',
+            'orders.filters.dateFrom': 'Start Date',
+            'orders.filters.dateTo': 'End Date',
+            'orders.filters.allTypes': 'All Types',
+            'orders.filters.allStatus': 'All Status',
+            'orders.filters.purchase': 'Purchase',
+            'orders.filters.recharge': 'Recharge',
+            'orders.filters.pending': 'Pending',
+            'orders.filters.paid': 'Paid',
+            'orders.filters.completed': 'Completed',
+            'orders.filters.cancelled': 'Cancelled',
+            'orders.filters.refunded': 'Refunded',
+            'orders.listTitle': '<i class="fas fa-list"></i> Orders',
+            'orders.table.number': 'Order #',
+            'orders.table.type': 'Type',
+            'orders.table.amount': 'Amount',
+            'orders.table.status': 'Status',
+            'orders.table.created': 'Created',
+            'orders.table.description': 'Description',
+            'orders.table.actions': 'Actions',
+            'orders.details': '<i class="fas fa-file-invoice"></i> Order Details',
+            'orders.paymentDetails': '<i class="fas fa-credit-card"></i> Payment Details',
+
             'pricing.title': 'Pricing Plans',
             'pricing.basic': 'Basic',
             'pricing.professional': 'Professional',
             'pricing.enterprise': 'Enterprise',
             'pricing.contact': 'Contact Sales',
-            
-            // Footer
-            'footer.copyright': '© 2024 ManyProxy. All rights reserved.',
-            'footer.contact': 'Contact Us',
-            'footer.api_docs': 'API Documentation',
-            'footer.privacy': 'Privacy Policy',
-            'footer.terms': 'Terms of Service',
-            'footer.about': 'About Us',
-            'footer.support': 'Technical Support',
-            
-            // Common
-            'btn.get_started': 'Get Started',
-            'btn.learn_more': 'Learn More',
-            'btn.buy_now': 'Buy Now',
-            'price.from': 'From',
-            'price.month': '/month'
         }
     },
-    
-    t(key) {
-        const keys = key.split('.');
-        let value = this.translations[this.currentLang];
-        
-        for (const k of keys) {
-            value = value?.[k];
+
+    normalizeLang(lang) {
+        if (!lang) return this.defaultLang;
+        const value = String(lang).toLowerCase();
+        if (['zh', 'zh-cn', 'zh_cn', 'cn', 'chinese'].includes(value)) {
+            return 'zh';
         }
-        
-        return value || key;
+        if (['en', 'en-us', 'en_us', 'english'].includes(value)) {
+            return 'en';
+        }
+        return this.defaultLang;
     },
-    
+
+    init() {
+        const stored = localStorage.getItem('language');
+        const normalized = this.normalizeLang(stored);
+        this.currentLang = normalized;
+        if (stored !== normalized) {
+            localStorage.setItem('language', normalized);
+        }
+    },
+
+    t(key, vars = {}) {
+        const primary = this.translations[this.currentLang] || {};
+        const fallback = this.translations[this.defaultLang] || {};
+        let template = primary[key] ?? fallback[key] ?? key;
+        if (typeof template === 'string' && template.includes('{{')) {
+            template = template.replace(/{{\s*(\w+)\s*}}/g, (_, token) => {
+                const value = vars[token];
+                return value !== undefined ? value : '';
+            });
+        }
+        return template;
+    },
+
     setLang(lang) {
-        this.currentLang = lang;
-        localStorage.setItem('language', lang);
+        const normalized = this.normalizeLang(lang);
+        if (!this.translations[normalized]) return;
+        if (this.currentLang === normalized) return;
+        this.currentLang = normalized;
+        localStorage.setItem('language', normalized);
         this.updatePage();
     },
-    
-    updatePage() {
-        document.querySelectorAll('[data-i18n]').forEach(element => {
+
+    updatePage(root = document) {
+        root.querySelectorAll('[data-i18n]').forEach(element => {
             const key = element.getAttribute('data-i18n');
-            element.textContent = this.t(key);
+            const target = element.getAttribute('data-i18n-target') || 'text';
+            const attr = element.getAttribute('data-i18n-attr');
+            const translation = this.t(key);
+            if (attr) {
+                element.setAttribute(attr, translation);
+            } else if (target === 'html') {
+                element.innerHTML = translation;
+            } else {
+                element.textContent = translation;
+            }
         });
-        
-        // Update HTML lang attribute
         document.documentElement.lang = this.currentLang;
-        
-        // Update language switcher
         document.querySelectorAll('.lang-switcher').forEach(btn => {
             btn.classList.toggle('active', btn.dataset.lang === this.currentLang);
         });
     }
 };
 
-// Initialize i18n when DOM is loaded
+i18n.init();
+
 document.addEventListener('DOMContentLoaded', () => {
     i18n.updatePage();
+    document.addEventListener('click', (event) => {
+        const trigger = event.target.closest('.lang-switcher');
+        if (!trigger) return;
+        event.preventDefault();
+        const lang = trigger.dataset.lang;
+        if (lang) {
+            i18n.setLang(lang);
+        }
+    });
 });

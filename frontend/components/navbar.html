@@ -1,8 +1,8 @@
-<!-- 导航栏组件 -->
 <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
     <div class="container">
-        <a class="navbar-brand" href="dashboard.html">
-            <i class="fas fa-server"></i> ManyProxy
+        <a class="navbar-brand d-flex align-items-center" href="dashboard.html">
+            <i class="fas fa-server me-2"></i>
+            <span data-i18n="common.brand">ManyProxy</span>
         </a>
         <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
             <span class="navbar-toggler-icon"></span>
@@ -11,48 +11,77 @@
             <ul class="navbar-nav me-auto">
                 <li class="nav-item">
                     <a class="nav-link" href="dashboard.html">
-                        <i class="fas fa-tachometer-alt"></i> 仪表板
+                        <i class="fas fa-tachometer-alt me-1"></i>
+                        <span data-i18n="nav.dashboard">仪表盘</span>
                     </a>
                 </li>
                 <li class="nav-item">
                     <a class="nav-link" href="proxy.html">
-                        <i class="fas fa-globe"></i> 代理管理
+                        <i class="fas fa-globe me-1"></i>
+                        <span data-i18n="nav.proxy">代理管理</span>
                     </a>
                 </li>
                 <li class="nav-item">
                     <a class="nav-link" href="products.html">
-                        <i class="fas fa-shopping-cart"></i> 产品购买
+                        <i class="fas fa-shopping-cart me-1"></i>
+                        <span data-i18n="nav.store">产品购买</span>
                     </a>
                 </li>
                 <li class="nav-item">
                     <a class="nav-link" href="profile.html">
-                        <i class="fas fa-user"></i> 个人资料
+                        <i class="fas fa-user me-1"></i>
+                        <span data-i18n="nav.profile">个人资料</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="recharge.html">
+                        <i class="fas fa-wallet me-1"></i>
+                        <span data-i18n="nav.recharge">余额充值</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="/api/v1/docs" target="_blank" rel="noopener">
+                        <i class="fas fa-book me-1"></i>
+                        <span data-i18n="nav.apiDocs">API 文档</span>
                     </a>
                 </li>
                 <li class="nav-item" id="admin-nav-item" style="display: none;">
                     <a class="nav-link" href="admin.html">
-                        <i class="fas fa-cogs"></i> 管理员
-                    </a>
-                </li>
-                <li class="nav-item">
-                    <a class="nav-link" href="/api/v1/docs" target="_blank">
-                        <i class="fas fa-book"></i> API文档
+                        <i class="fas fa-cogs me-1"></i>
+                        <span data-i18n="nav.admin">管理后台</span>
                     </a>
                 </li>
             </ul>
             <ul class="navbar-nav">
                 <li class="nav-item dropdown">
-                    <a class="nav-link dropdown-toggle" href="#" id="navbarDropdown" role="button" data-bs-toggle="dropdown">
-                        <i class="fas fa-user"></i> <span id="username">用户</span>
+                    <a class="nav-link dropdown-toggle" href="#" id="langDropdown" role="button" data-bs-toggle="dropdown">
+                        <i class="fas fa-globe me-1"></i>
+                        <span data-i18n="nav.language">语言</span>
                     </a>
-                    <ul class="dropdown-menu">
-                        <li><a class="dropdown-item" href="recharge.html">
-                            <i class="fas fa-wallet"></i> 余额充值
-                        </a></li>
+                    <ul class="dropdown-menu dropdown-menu-end">
+                        <li><a class="dropdown-item lang-switcher" href="#" data-lang="zh">中文</a></li>
+                        <li><a class="dropdown-item lang-switcher" href="#" data-lang="en">English</a></li>
+                    </ul>
+                </li>
+                <li class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle" href="#" id="navbarDropdown" role="button" data-bs-toggle="dropdown">
+                        <i class="fas fa-user me-1"></i>
+                        <span id="username" data-i18n="nav.welcome">用户</span>
+                    </a>
+                    <ul class="dropdown-menu dropdown-menu-end">
+                        <li>
+                            <a class="dropdown-item" href="recharge.html">
+                                <i class="fas fa-wallet me-2"></i>
+                                <span data-i18n="nav.recharge">余额充值</span>
+                            </a>
+                        </li>
                         <li><hr class="dropdown-divider"></li>
-                        <li><a class="dropdown-item" href="#" id="logout-btn">
-                            <i class="fas fa-sign-out-alt"></i> 退出登录
-                        </a></li>
+                        <li>
+                            <a class="dropdown-item" href="#" id="logout-btn">
+                                <i class="fas fa-sign-out-alt me-2"></i>
+                                <span data-i18n="nav.logout">退出登录</span>
+                            </a>
+                        </li>
                     </ul>
                 </li>
             </ul>

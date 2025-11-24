@@ -1,43 +1,49 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ManyProxy - 代理管理</title>
+    <title data-i18n="proxy.pageTitle">ManyProxy - Proxy Management</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link href="../css/style.css" rel="stylesheet">
 </head>
 <body>
-    <!-- 导航栏 -->
     <div id="navbar-container"></div>
 
-    <!-- 主要内容区域 -->
-    <main class="container mt-4">
-        <div class="d-flex justify-content-between align-items-center mb-4">
-            <h2><i class="fas fa-globe"></i> 代理管理</h2>
-            <div>
-                <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#buyProxyModal">
-                    <i class="fas fa-plus"></i> 购买代理
-                </button>
+    <main class="container py-4">
+        <div class="card mb-4 shadow-sm">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
+                    <div>
+                        <h2 class="mb-2" data-i18n="proxy.title" data-i18n-target="html">
+                            <i class="fas fa-globe"></i> Proxy Management
+                        </h2>
+                        <p class="text-muted mb-0" data-i18n="proxy.pageDescription">
+                            Review all purchased static, dynamic, and mobile proxies and copy the corresponding token for API calls.
+                        </p>
+                    </div>
+                    <div class="badge bg-light text-dark px-3 py-2" data-i18n="proxy.tokenNotice">
+                        Tokens are only displayed here—store them securely.
+                    </div>
+                </div>
             </div>
         </div>
 
-        <!-- 代理类型标签页 -->
         <ul class="nav nav-tabs" id="proxyTabs" role="tablist">
             <li class="nav-item" role="presentation">
                 <button class="nav-link active" id="static-tab" data-bs-toggle="tab" data-bs-target="#static" type="button">
-                    <i class="fas fa-desktop"></i> 静态代理
+                    <span data-i18n="proxy.tabs.static" data-i18n-target="html"><i class="fas fa-desktop"></i> Static Proxies</span>
                 </button>
             </li>
             <li class="nav-item" role="presentation">
                 <button class="nav-link" id="dynamic-tab" data-bs-toggle="tab" data-bs-target="#dynamic" type="button">
-                    <i class="fas fa-sync"></i> 动态代理
+                    <span data-i18n="proxy.tabs.dynamic" data-i18n-target="html"><i class="fas fa-sync"></i> Dynamic Proxies</span>
                 </button>
             </li>
             <li class="nav-item" role="presentation">
                 <button class="nav-link" id="mobile-tab" data-bs-toggle="tab" data-bs-target="#mobile" type="button">
-                    <i class="fas fa-mobile-alt"></i> 移动代理
+                    <span data-i18n="proxy.tabs.mobile" data-i18n-target="html"><i class="fas fa-mobile-alt"></i> Mobile Proxies</span>
                 </button>
             </li>
         </ul>
@@ -45,189 +51,112 @@
         <div class="tab-content" id="proxyTabsContent">
             <div class="tab-pane fade show active" id="static" role="tabpanel">
                 <div class="card mt-3">
-                    <div class="card-body">
-                        <div class="table-responsive">
-                            <table class="table table-striped">
-                                <thead>
-                                    <tr>
-                                        <th>ID</th>
-                                        <th>运营商</th>
-                                        <th>IP地址</th>
-                                        <th>端口</th>
-                                        <th>状态</th>
-                                        <th>创建时间</th>
-                                        <th>操作</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="static-proxies-list">
-                                    <tr>
-                                        <td colspan="7" class="text-center text-muted">暂无静态代理</td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
+                    <div class="card-body table-responsive">
+                        <table class="table table-striped align-middle mb-0">
+                            <thead>
+                                <tr>
+                                    <th data-i18n="proxy.table.order">Order</th>
+                                    <th data-i18n="proxy.table.info">Proxy Details</th>
+                                    <th data-i18n="proxy.table.created">Created</th>
+                                    <th data-i18n="proxy.table.expires">Expires</th>
+                                </tr>
+                            </thead>
+                            <tbody id="static-proxies"></tbody>
+                        </table>
                     </div>
                 </div>
             </div>
+
             <div class="tab-pane fade" id="dynamic" role="tabpanel">
                 <div class="card mt-3">
-                    <div class="card-body">
-                        <div class="table-responsive">
-                            <table class="table table-striped">
-                                <thead>
-                                    <tr>
-                                        <th>订单ID</th>
-                                        <th>类型</th>
-                                        <th>数量</th>
-                                        <th>状态</th>
-                                        <th>到期时间</th>
-                                        <th>操作</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="dynamic-proxies-list">
-                                    <tr>
-                                        <td colspan="6" class="text-center text-muted">暂无动态代理</td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
+                    <div class="card-body table-responsive">
+                        <table class="table table-striped align-middle mb-0">
+                            <thead>
+                                <tr>
+                                    <th data-i18n="proxy.table.order">Order</th>
+                                    <th data-i18n="proxy.table.token">Product Token</th>
+                                    <th data-i18n="proxy.table.status">Status</th>
+                                    <th data-i18n="proxy.table.expires">Expires</th>
+                                </tr>
+                            </thead>
+                            <tbody id="dynamic-proxies"></tbody>
+                        </table>
                     </div>
+                </div>
+
+                <div class="alert alert-info mt-3" data-i18n="proxy.apiGuide.dynamicTip">
+                    Use the API guide below to fetch or refresh rotating residential proxies with the provided token.
                 </div>
             </div>
+
             <div class="tab-pane fade" id="mobile" role="tabpanel">
                 <div class="card mt-3">
-                    <div class="card-body">
-                        <div class="table-responsive">
-                            <table class="table table-striped">
-                                <thead>
-                                    <tr>
-                                        <th>订单ID</th>
-                                        <th>运营商</th>
-                                        <th>IP地址</th>
-                                        <th>状态</th>
-                                        <th>创建时间</th>
-                                        <th>操作</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="mobile-proxies-list">
-                                    <tr>
-                                        <td colspan="6" class="text-center text-muted">暂无移动代理</td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
+                    <div class="card-body table-responsive">
+                        <table class="table table-striped align-middle mb-0">
+                            <thead>
+                                <tr>
+                                    <th data-i18n="proxy.table.order">Order</th>
+                                    <th data-i18n="proxy.table.token">Product Token</th>
+                                    <th data-i18n="proxy.table.server">Server</th>
+                                    <th data-i18n="proxy.table.expires">Expires</th>
+                                </tr>
+                            </thead>
+                            <tbody id="mobile-proxies"></tbody>
+                        </table>
                     </div>
                 </div>
+
+                <div class="alert alert-warning mt-3" data-i18n="proxy.apiGuide.mobileTip">
+                    Mobile proxy tokens mirror the upstream key_code—submit them to reset IPs instantly.
+                </div>
+            </div>
+        </div>
+
+        <div class="card mt-4 shadow-sm">
+            <div class="card-header">
+                <h5 class="mb-0" data-i18n="proxy.apiGuide.title">API Usage</h5>
+            </div>
+            <div class="card-body">
+                <p class="mb-3" data-i18n="proxy.apiGuide.description" data-i18n-target="html">
+                    Include <code>X-API-Key: {API key copied from Profile}</code> in the request header, then call these endpoints to refresh or reset proxies.
+                </p>
+                <ul class="mb-0">
+                    <li data-i18n="proxy.apiGuide.dynamic" data-i18n-target="html">
+                        <strong>Dynamic proxy:</strong> <code>GET /api/v1/proxy/dynamic/token/{token}?carrier=random&province=0</code> returns the latest exit IP.
+                    </li>
+                    <li data-i18n="proxy.apiGuide.mobile" data-i18n-target="html">
+                        <strong>Mobile proxy:</strong> <code>POST /api/v1/proxy/mobile/token/{token}/reset</code> resets the IP and returns the upstream response.
+                    </li>
+                </ul>
             </div>
         </div>
     </main>
 
-    <!-- 页脚 -->
     <div id="footer-container"></div>
 
-
-    <!-- 购买代理模态框 -->
-    <div class="modal fade" id="buyProxyModal" tabindex="-1">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">购买代理</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <form id="buy-proxy-form">
-                        <div class="mb-3">
-                            <label for="proxy-type" class="form-label">代理类型</label>
-                            <select class="form-select" id="proxy-type" required>
-                                <option value="">选择代理类型</option>
-                                <option value="static">静态代理</option>
-                                <option value="dynamic">动态代理</option>
-                                <option value="mobile">移动代理</option>
-                            </select>
-                        </div>
-                        
-                        <!-- 静态代理选项 -->
-                        <div id="static-options" style="display: none;">
-                            <div class="mb-3">
-                                <label for="static-provider" class="form-label">运营商</label>
-                                <select class="form-select" id="static-provider">
-                                    <option value="viettel">Viettel</option>
-                                    <option value="fpt">FPT</option>
-                                    <option value="vnpt">VNPT</option>
-                                </select>
-                            </div>
-                            <div class="mb-3">
-                                <label for="static-quantity" class="form-label">数量</label>
-                                <input type="number" class="form-control" id="static-quantity" min="1" value="1">
-                            </div>
-                        </div>
-                        
-                        <!-- 动态代理选项 -->
-                        <div id="dynamic-options" style="display: none;">
-                            <div class="mb-3">
-                                <label for="dynamic-package" class="form-label">套餐</label>
-                                <select class="form-select" id="dynamic-package">
-                                    <option value="daily">每日套餐</option>
-                                    <option value="weekly">每周套餐</option>
-                                    <option value="monthly">每月套餐</option>
-                                </select>
-                            </div>
-                            <div class="mb-3">
-                                <label for="dynamic-quantity" class="form-label">数量</label>
-                                <input type="number" class="form-control" id="dynamic-quantity" min="1" value="1">
-                            </div>
-                        </div>
-                        
-                        <!-- 移动代理选项 -->
-                        <div id="mobile-options" style="display: none;">
-                            <div class="mb-3">
-                                <label for="mobile-provider" class="form-label">运营商</label>
-                                <select class="form-select" id="mobile-provider">
-                                    <option value="viettel">Viettel Mobile</option>
-                                    <option value="mobifone">Mobifone</option>
-                                    <option value="vinaphone">Vinaphone</option>
-                                </select>
-                            </div>
-                            <div class="mb-3">
-                                <label for="mobile-quantity" class="form-label">数量</label>
-                                <input type="number" class="form-control" id="mobile-quantity" min="1" value="1">
-                            </div>
-                        </div>
-                    </form>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
-                    <button type="button" class="btn btn-primary" id="confirm-buy-proxy">确认购买</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- 提示消息 -->
     <div class="toast-container position-fixed bottom-0 end-0 p-3">
-        <div id="toast" class="toast" role="alert">
+        <div id="toast" class="toast" role="alert" aria-live="polite" aria-atomic="true">
             <div class="toast-header">
-                <strong class="me-auto">系统消息</strong>
+                <strong class="me-auto" data-i18n="common.toastTitle">System Message</strong>
                 <button type="button" class="btn-close" data-bs-dismiss="toast"></button>
             </div>
             <div class="toast-body" id="toast-message"></div>
         </div>
     </div>
 
-    <!-- JavaScript -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
     <script src="../js/config.js?v=2"></script>
-    <script src="../js/api.js"></script>
+    <script src="../js/api.js?v=2"></script>
     <script src="../js/auth.js?v=2"></script>
-    <script src="../js/proxy.js"></script>
+    <script src="../js/i18n.js?v=2"></script>
     <script src="../components/navbar.js?v=2"></script>
-    
+    <script src="../js/proxy.js?v=2"></script>
     <script>
-        document.addEventListener('DOMContentLoaded', async function() {
+        document.addEventListener('DOMContentLoaded', async () => {
             try {
                 await sessionController.ensurePage('proxy', { redirectTo: 'login.html' });
             } catch (error) {
-                console.warn('无法访问代理页面', error);
+                console.warn('Unable to access proxy management page', error);
                 return;
             }
 
@@ -235,65 +164,17 @@
                 .then(response => response.text())
                 .then(html => {
                     document.getElementById('navbar-container').innerHTML = html;
-                    
                     setTimeout(() => {
                         if (typeof NavbarManager !== 'undefined') {
                             window.navbarManager = new NavbarManager();
                             window.navbarManager.setActiveNavigation('proxy.html');
                             window.navbarManager.rebindEvents();
                         }
-                        initProxyPage();
-                    }, 100);
+                        if (window.i18n) i18n.updatePage();
+                    }, 50);
                 })
-                .catch(error => {
-                    console.error('加载导航栏失败:', error);
-                    initProxyPage();
-                });
+                .catch(error => console.error('Failed to load navbar:', error));
         });
-
-        // 初始化代理页面
-        async function initProxyPage() {
-            try {
-                await sessionController.initialized;
-                const userInfo = sessionController.getUser() || await api.getUserInfo();
-                if (userInfo?.is_admin) {
-                    document.getElementById('admin-nav-item').style.display = 'block';
-                }
-                
-            } catch (error) {
-                console.error('获取用户信息失败:', error);
-            }
-            
-            // 加载代理列表
-            proxyManager.loadProxyList();
-        }
-
-        // 简化toast函数
-        function showToast(message, type = 'info') {
-            const toast = document.getElementById('toast');
-            const toastMessage = document.getElementById('toast-message');
-            
-            toastMessage.textContent = message;
-            
-            // 设置toast样式
-            toast.className = 'toast';
-            switch (type) {
-                case 'success':
-                    toast.classList.add('bg-success', 'text-white');
-                    break;
-                case 'error':
-                    toast.classList.add('bg-danger', 'text-white');
-                    break;
-                case 'warning':
-                    toast.classList.add('bg-warning', 'text-dark');
-                    break;
-                default:
-                    toast.classList.add('bg-info', 'text-white');
-            }
-            
-            const bsToast = new bootstrap.Toast(toast);
-            bsToast.show();
-        }
     </script>
     <script src="../components/footer.js"></script>
 </body>

@@ -1,4 +1,4 @@
-// 仪表板模块
+// Dashboard module with localization support
 class DashboardManager {
     constructor() {
         this.chart = null;
@@ -7,63 +7,51 @@ class DashboardManager {
 
     initChart() {
         const ctx = document.getElementById('proxyChart');
-        if (ctx) {
-            this.chart = new Chart(ctx, {
-                type: 'doughnut',
-                data: {
-                    labels: ['静态代理', '动态代理', '移动代理'],
-                    datasets: [{
-                        data: [0, 0, 0],
-                        backgroundColor: [
-                            '#0d6efd',
-                            '#198754',
-                            '#ffc107'
-                        ],
-                        borderWidth: 2,
-                        borderColor: '#fff'
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: {
-                            position: 'bottom',
-                            labels: {
-                                padding: 20,
-                                font: {
-                                    size: 12
-                                }
-                            }
-                        },
-                        tooltip: {
-                            callbacks: {
-                                label: function(context) {
-                                    const label = context.label || '';
-                                    const value = context.parsed || 0;
-                                    const total = context.dataset.data.reduce((a, b) => a + b, 0);
-                                    const percentage = ((value / total) * 100).toFixed(1);
-                                    return `${label}: ${value} (${percentage}%)`;
-                                }
+        if (!ctx) return;
+
+        this.chart = new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: this.getProxyLabels(),
+                datasets: [{
+                    data: [0, 0, 0],
+                    backgroundColor: ['#0d6efd', '#198754', '#ffc107'],
+                    borderWidth: 2,
+                    borderColor: '#fff'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: {
+                            padding: 20,
+                            font: { size: 12 }
+                        }
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: (context) => {
+                                const label = context.label || '';
+                                const value = context.parsed || 0;
+                                const total = context.dataset.data.reduce((a, b) => a + b, 0) || 1;
+                                const percentage = ((value / total) * 100).toFixed(1);
+                                return `${label}: ${value} (${percentage}%)`;
                             }
                         }
                     }
                 }
-            });
-        }
+            }
+        });
     }
 
     async loadDashboardData() {
         try {
-            // 加载代理统计
             await this.loadProxyStats();
-            
-            // 加载API密钥统计
             await this.loadApiKeyStats();
-            
-            // 加载最近活动
             await this.loadRecentActivities();
-            
         } catch (error) {
             console.error('加载仪表板数据失败:', error);
         }
@@ -72,13 +60,11 @@ class DashboardManager {
     async loadProxyStats() {
         try {
             const stats = await api.getProxyStats();
-            
-            // 更新统计卡片
             document.getElementById('total-proxies').textContent = stats.total_proxies || 0;
             document.getElementById('active-proxies').textContent = stats.active_proxies || 0;
-            
-            // 更新图表
+
             if (this.chart) {
+                this.chart.data.labels = this.getProxyLabels();
                 this.chart.data.datasets[0].data = [
                     stats.static_proxies || 0,
                     stats.dynamic_proxies || 0,
@@ -86,10 +72,8 @@ class DashboardManager {
                 ];
                 this.chart.update();
             }
-            
         } catch (error) {
             console.error('加载代理统计失败:', error);
-            // 设置默认值
             document.getElementById('total-proxies').textContent = '0';
             document.getElementById('active-proxies').textContent = '0';
         }
@@ -99,59 +83,29 @@ class DashboardManager {
         try {
             const apiKeys = await api.getApiKeys();
             const activeKeys = apiKeys.filter(key => key.is_active).length;
-            
             document.getElementById('api-keys-count').textContent = activeKeys;
-            
         } catch (error) {
-            console.error('加载API密钥统计失败:', error);
+            console.error('加载 API 密钥统计失败:', error);
             document.getElementById('api-keys-count').textContent = '0';
         }
     }
 
     async loadRecentActivities() {
         try {
-            // 这里可以添加获取最近活动的API调用
-            // const activities = await api.getRecentActivities();
-            
-            // 模拟最近活动数据
-            const activities = [
-                {
-                    type: 'proxy_purchase',
-                    message: '购买了1个Viettel静态代理',
-                    time: '2024-01-15 10:30:00',
-                    icon: 'fas fa-shopping-cart',
-                    color: 'text-primary'
-                },
-                {
-                    type: 'api_key_created',
-                    message: '创建了新的API密钥',
-                    time: '2024-01-15 09:15:00',
-                    icon: 'fas fa-key',
-                    color: 'text-success'
-                },
-                {
-                    type: 'proxy_test',
-                    message: '测试了代理连接',
-                    time: '2024-01-15 08:45:00',
-                    icon: 'fas fa-plug',
-                    color: 'text-info'
-                }
-            ];
-            
+            const activities = this.buildSampleActivities();
             this.renderRecentActivities(activities);
-            
         } catch (error) {
             console.error('加载最近活动失败:', error);
-            document.getElementById('recent-activities').innerHTML = 
-                '<p class="text-muted">加载活动记录失败</p>';
+            document.getElementById('recent-activities').innerHTML =
+                `<p class="text-muted">${i18n?.t('dashboard.activitiesFailed') || '加载活动记录失败'}</p>`;
         }
     }
 
     renderRecentActivities(activities) {
         const container = document.getElementById('recent-activities');
-        
         if (!activities || activities.length === 0) {
-            container.innerHTML = '<p class="text-muted">暂无活动记录</p>';
+            container.innerHTML =
+                `<p class="text-muted">${i18n?.t('dashboard.noActivities') || '暂无活动记录'}</p>`;
             return;
         }
 
@@ -177,46 +131,80 @@ class DashboardManager {
         const diffDays = Math.floor(diffMs / 86400000);
 
         if (diffMins < 1) {
-            return '刚刚';
-        } else if (diffMins < 60) {
-            return `${diffMins}分钟前`;
-        } else if (diffHours < 24) {
-            return `${diffHours}小时前`;
-        } else if (diffDays < 7) {
-            return `${diffDays}天前`;
-        } else {
-            return date.toLocaleDateString('zh-CN');
+            return i18n?.t('common.time.justNow') || '刚刚';
         }
+        if (diffMins < 60) {
+            return i18n?.t('common.time.minutesAgo', { count: diffMins }) || `${diffMins}分钟前`;
+        }
+        if (diffHours < 24) {
+            return i18n?.t('common.time.hoursAgo', { count: diffHours }) || `${diffHours}小时前`;
+        }
+        if (diffDays < 7) {
+            return i18n?.t('common.time.daysAgo', { count: diffDays }) || `${diffDays}天前`;
+        }
+        return date.toLocaleDateString(i18n?.currentLang === 'en' ? 'en-US' : 'zh-CN');
     }
 
-    // 更新API调用统计
     updateApiCallStats() {
-        // 这里可以从localStorage或API获取API调用统计
-        const apiCalls = parseInt(localStorage.getItem('api_calls') || '0');
+        const apiCalls = parseInt(localStorage.getItem('api_calls') || '0', 10);
         document.getElementById('api-calls').textContent = apiCalls;
     }
 
-    // 增加API调用计数
     incrementApiCallCount() {
-        const currentCount = parseInt(localStorage.getItem('api_calls') || '0');
+        const currentCount = parseInt(localStorage.getItem('api_calls') || '0', 10);
         const newCount = currentCount + 1;
         localStorage.setItem('api_calls', newCount.toString());
         document.getElementById('api-calls').textContent = newCount;
     }
 
-    // 刷新仪表板
     async refresh() {
         try {
-            window.app.showToast('正在刷新数据...', 'info');
+            window.app.showToast(i18n?.t('dashboard.toast.refreshing') || '正在刷新数据...', 'info');
             await this.loadDashboardData();
-            window.app.showToast('数据已更新', 'success');
+            window.app.showToast(i18n?.t('dashboard.toast.success') || '数据已更新', 'success');
         } catch (error) {
             console.error('刷新仪表板失败:', error);
-            window.app.showToast('刷新失败', 'error');
+            window.app.showToast(i18n?.t('dashboard.toast.failed') || '刷新失败', 'error');
         }
     }
 
-    // 获取仪表板摘要
+    getProxyLabels() {
+        if (window.i18n) {
+            return [
+                i18n.t('proxy.labels.static'),
+                i18n.t('proxy.labels.dynamic'),
+                i18n.t('proxy.labels.mobile')
+            ];
+        }
+        return ['Static', 'Dynamic', 'Mobile'];
+    }
+
+    buildSampleActivities() {
+        return [
+            {
+                type: 'proxy_purchase',
+                message: i18n?.t('dashboard.samples.staticPurchase') || '购买了一条静态代理',
+                time: '2024-01-15T10:30:00',
+                icon: 'fas fa-shopping-cart',
+                color: 'text-primary'
+            },
+            {
+                type: 'api_key_created',
+                message: i18n?.t('dashboard.samples.apiCreated') || '创建了新的 API 密钥',
+                time: '2024-01-15T09:15:00',
+                icon: 'fas fa-key',
+                color: 'text-success'
+            },
+            {
+                type: 'proxy_test',
+                message: i18n?.t('dashboard.samples.proxyTest') || '测试了代理连接',
+                time: '2024-01-15T08:45:00',
+                icon: 'fas fa-plug',
+                color: 'text-info'
+            }
+        ];
+    }
+
     getDashboardSummary() {
         return {
             totalProxies: parseInt(document.getElementById('total-proxies').textContent) || 0,
@@ -227,8 +215,5 @@ class DashboardManager {
     }
 }
 
-// 创建全局仪表板管理器实例
 const dashboardManager = new DashboardManager();
-
-// 导出仪表板管理器
 window.dashboardManager = dashboardManager;

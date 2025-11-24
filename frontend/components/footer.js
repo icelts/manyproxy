@@ -8,6 +8,9 @@
             .then((response) => response.text())
             .then((html) => {
                 container.innerHTML = html;
+                if (window.i18n) {
+                    i18n.updatePage(container);
+                }
             })
             .catch((error) => console.error('加载页脚失败:', error));
     };

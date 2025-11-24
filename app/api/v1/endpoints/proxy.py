@@ -90,7 +90,31 @@ async def get_dynamic_proxy(
     user_id: int = Depends(get_current_api_user)
 ):
     """获取动态代理"""
-    return await ProxyService.get_dynamic_proxy(db, user_id, order_id, carrier, province)
+    return await ProxyService.get_dynamic_proxy(
+        db,
+        user_id,
+        order_id=order_id,
+        carrier=carrier,
+        province=province
+    )
+
+
+@router.get("/dynamic/token/{token}")
+async def get_dynamic_proxy_by_token(
+    token: str,
+    carrier: str = Query("random", description="运营商"),
+    province: str = Query("0", description="省份"),
+    db: AsyncSession = Depends(get_db),
+    user_id: int = Depends(get_current_api_user)
+):
+    """通过上游token获取动态代理"""
+    return await ProxyService.get_dynamic_proxy(
+        db,
+        user_id,
+        token=token,
+        carrier=carrier,
+        province=province
+    )
 
 
 @router.post("/mobile/{order_id}/reset")
@@ -100,7 +124,25 @@ async def reset_mobile_proxy(
     user_id: int = Depends(get_current_api_user),
 ):
     """Reset mobile proxy IP"""
-    return await ProxyService.reset_mobile_proxy(db, user_id, order_id)
+    return await ProxyService.reset_mobile_proxy(
+        db,
+        user_id,
+        order_id=order_id
+    )
+
+
+@router.post("/mobile/token/{token}/reset")
+async def reset_mobile_proxy_by_token(
+    token: str,
+    db: AsyncSession = Depends(get_db),
+    user_id: int = Depends(get_current_api_user),
+):
+    """Reset mobile proxy IP via upstream token"""
+    return await ProxyService.reset_mobile_proxy(
+        db,
+        user_id,
+        token=token
+    )
 
 
 @router.get("/stats", response_model=ProxyStatsResponse)

@@ -84,6 +84,40 @@ class ProxyService:
         return product, user, total_price, actual_duration
 
     @staticmethod
+    async def _get_active_order(
+        db: AsyncSession,
+        user_id: int,
+        *,
+        order_id: Optional[str] = None,
+        token: Optional[str] = None,
+        prefix: Optional[str] = None,
+    ) -> Optional[ProxyOrder]:
+        """Retrieve an active order by internal identifier or upstream token."""
+        if not order_id and not token:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="order_id or token is required"
+            )
+
+        query = select(ProxyOrder).where(
+            ProxyOrder.user_id == user_id,
+            ProxyOrder.status == "active"
+        )
+
+        if order_id:
+            query = query.where(ProxyOrder.order_id == order_id)
+        if token:
+            query = query.where(ProxyOrder.upstream_id == token)
+
+        result = await db.execute(query)
+        proxy_order = result.scalar_one_or_none()
+
+        if proxy_order and prefix and not proxy_order.order_id.startswith(prefix):
+            return None
+
+        return proxy_order
+
+    @staticmethod
     def _calculate_total_price(
         product: ProxyProduct,
         quantity: int,
@@ -384,26 +418,25 @@ class ProxyService:
     
     @staticmethod
     async def get_dynamic_proxy(db: AsyncSession, user_id: int, 
-                              order_id: str, carrier: str = "random",
-                              province: str = "0") -> Dict[str, Any]:
+    @staticmethod
+    async def get_dynamic_proxy(db: AsyncSession, user_id: int,
+                              order_id: Optional[str] = None, carrier: str = "random",
+                              province: str = "0", token: Optional[str] = None) -> Dict[str, Any]:
         """获取动态代理"""
-        # 获取订单信息
-        result = await db.execute(
-            select(ProxyOrder).where(
-                ProxyOrder.user_id == user_id,
-                ProxyOrder.order_id == order_id,
-                ProxyOrder.status == "active"
-            )
+        proxy_order = await ProxyService._get_active_order(
+            db,
+            user_id,
+            order_id=order_id,
+            token=token,
+            prefix="DYNAMIC_"
         )
-        proxy_order = result.scalar_one_or_none()
-        
+
         if not proxy_order:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Proxy order not found or inactive"
             )
-        
-        # 调用上游API获取代理
+
         try:
             upstream_result = await DynamicProxyService.get_rotation_proxy(
                 key=proxy_order.upstream_id,
@@ -416,37 +449,34 @@ class ProxyService:
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Failed to get proxy from upstream"
             )
-        
+
         if upstream_result.get("status") != 100:
             error_msg = upstream_result.get("message", "Unknown error")
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Upstream API error: {error_msg}"
             )
-        
+
         return upstream_result
     
     @staticmethod
-    async def reset_mobile_proxy(db: AsyncSession, user_id: int, 
-                               order_id: str) -> Dict[str, Any]:
+    async def reset_mobile_proxy(db: AsyncSession, user_id: int,
+                               order_id: Optional[str] = None, token: Optional[str] = None) -> Dict[str, Any]:
         """重置移动代理IP"""
-        # 获取订单信息
-        result = await db.execute(
-            select(ProxyOrder).where(
-                ProxyOrder.user_id == user_id,
-                ProxyOrder.order_id == order_id,
-                ProxyOrder.status == "active"
-            )
+        proxy_order = await ProxyService._get_active_order(
+            db,
+            user_id,
+            order_id=order_id,
+            token=token,
+            prefix="MOBILE_"
         )
-        proxy_order = result.scalar_one_or_none()
-        
+
         if not proxy_order:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Proxy order not found or inactive"
             )
-        
-        # 调用上游API重置IP
+
         try:
             upstream_result = await MobileProxyService.reset_ip(
                 key_code=proxy_order.upstream_id
@@ -457,41 +487,38 @@ class ProxyService:
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Failed to reset IP from upstream"
             )
-        
+
         if upstream_result.get("status") != 1:
             error_msg = upstream_result.get("message", "Unknown error")
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Upstream API error: {error_msg}"
             )
-        
-        # 更新代理信息
+
         proxy_order.proxy_info = upstream_result["data"]
         await db.commit()
-        
+
         return upstream_result["data"]
-    
+
     @staticmethod
     async def get_proxy_stats(db: AsyncSession, user_id: int) -> ProxyStatsResponse:
         """获取代理统计信息"""
-        # 获取所有代理订单
         result = await db.execute(
             select(ProxyOrder).where(ProxyOrder.user_id == user_id)
         )
         orders = result.scalars().all()
-        
+
         total_proxies = len(orders)
         active_proxies = len([o for o in orders if o.status == "active"])
         expired_proxies = len([o for o in orders if o.status == "expired"])
-        
-        # 按类别统计
+
         by_category = {"static": 0, "dynamic": 0, "mobile": 0}
         by_provider = {}
-        
+
         for order in orders:
             if order.order_id.startswith("STATIC_"):
                 by_category["static"] += 1
-                provider = order.proxy_info.get("loaiproxy", "unknown")
+                provider = (order.proxy_info or {}).get("loaiproxy", "unknown")
                 by_provider[provider] = by_provider.get(provider, 0) + 1
             elif order.order_id.startswith("DYNAMIC_"):
                 by_category["dynamic"] += 1
@@ -499,7 +526,7 @@ class ProxyService:
             elif order.order_id.startswith("MOBILE_"):
                 by_category["mobile"] += 1
                 by_provider["mobile"] = by_provider.get("mobile", 0) + 1
-        
+
         return ProxyStatsResponse(
             total_proxies=total_proxies,
             active_proxies=active_proxies,
@@ -507,7 +534,6 @@ class ProxyService:
             by_category=by_category,
             by_provider=by_provider
         )
-    
     @staticmethod
     async def record_api_usage(db: AsyncSession, user_id: int, api_key_id: int,
                              endpoint: str, method: str, status_code: int,
