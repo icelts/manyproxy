@@ -17,6 +17,11 @@ class ProxyManager {
     }
 
     async loadProxyList() {
+        if (!api.hasApiKey()) {
+            this.renderApiKeyWarning();
+            this.showToast(i18n?.t('common.apiKeyRequired') || '请先创建 API Key 再查看代理。', 'warning');
+            return;
+        }
         try {
             const response = await api.get('/proxy/list');
             this.groupProxies(response.proxies || []);
@@ -24,6 +29,11 @@ class ProxyManager {
             this.renderDynamicProxies();
             this.renderMobileProxies();
         } catch (error) {
+            if (error?.code === 'API_KEY_REQUIRED') {
+                this.renderApiKeyWarning();
+                this.showToast(i18n?.t('common.apiKeyRequired') || '请先创建 API Key 再查看代理。', 'warning');
+                return;
+            }
             console.error('加载代理列表失败:', error);
             this.showToast(error.message || '加载代理失败', 'error');
             this.renderEmptyState('static-proxies', i18n?.t('proxy.empty.static'));
@@ -45,6 +55,24 @@ class ProxyManager {
         });
     }
 
+    renderApiKeyWarning() {
+        const message = i18n?.t('common.apiKeyRequired') || '请先创建 API Key 再查看代理。';
+        ['static-proxies', 'dynamic-proxies', 'mobile-proxies'].forEach((id) => {
+            const container = document.getElementById(id);
+            if (container) {
+                container.innerHTML = `
+                    <tr>
+                        <td colspan="5" class="text-center text-muted">
+                            <i class="fas fa-key fa-2x mb-2"></i>
+                            <div>${message}</div>
+                        </td>
+                    </tr>
+                `;
+            }
+        });
+    }
+
+
     renderStaticProxies() {
         const container = document.getElementById('static-proxies');
         if (!container) return;
@@ -65,6 +93,20 @@ class ProxyManager {
                     <td>${infoHtml}</td>
                     <td>${this.formatDate(order.created_at)}</td>
                     <td>${this.formatDate(order.expires_at)}</td>
+                    <td>
+                        <div class="btn-group" role="group">
+                            <button class="btn btn-outline-primary btn-sm" 
+                                    onclick="proxyManager.renewStaticProxy('${order.order_id}')"
+                                    title="续费">
+                                <i class="fas fa-redo"></i>
+                            </button>
+                            <button class="btn btn-outline-success btn-sm" 
+                                    onclick="proxyManager.exportStaticProxies()"
+                                    title="导出全部">
+                                <i class="fas fa-download"></i>
+                            </button>
+                        </div>
+                    </td>
                 </tr>
             `;
         }).join('');
@@ -88,6 +130,15 @@ class ProxyManager {
                 <td>${this.renderTokenCell(order.upstream_id)}</td>
                 <td>${this.renderStatusBadge(order.status)}</td>
                 <td>${this.formatDate(order.expires_at)}</td>
+                <td>
+                    <div class="btn-group" role="group">
+                        <button class="btn btn-outline-success btn-sm" 
+                                onclick="proxyManager.exportDynamicProxies()"
+                                title="导出全部">
+                            <i class="fas fa-download"></i>
+                        </button>
+                    </div>
+                </td>
             </tr>
         `).join('');
     }
@@ -171,7 +222,7 @@ class ProxyManager {
         if (!container) return;
         container.innerHTML = `
             <tr>
-                <td colspan="4" class="text-center text-muted">
+                <td colspan="5" class="text-center text-muted">
                     <i class="fas fa-inbox fa-2x mb-2"></i>
                     <div>${message || i18n?.t('common.noData') || '暂无数据'}</div>
                 </td>
@@ -198,6 +249,89 @@ class ProxyManager {
             return date.toLocaleString(i18n?.currentLang === 'en' ? 'en-US' : 'zh-CN', { hour12: false });
         } catch {
             return value;
+        }
+    }
+
+    async renewStaticProxy(orderId) {
+        try {
+            this.showToast('正在续费代理...', 'info');
+            
+            const response = await api.post(`/proxy/static/${orderId}/renew`);
+            
+            if (response.renewal_info) {
+                const info = response.renewal_info;
+                this.showToast(
+                    `续费成功！续费${info.duration_days}天，费用：¥${info.amount}，余额：¥${info.new_balance}`,
+                    'success'
+                );
+            } else {
+                this.showToast('续费成功！', 'success');
+            }
+            
+            // 刷新代理列表
+            await this.loadProxyList();
+            
+        } catch (error) {
+            console.error('续费失败:', error);
+            this.showToast(error.message || '续费失败，请稍后再试', 'error');
+        }
+    }
+
+    async exportStaticProxies() {
+        try {
+            this.showToast('正在导出静态代理...', 'info');
+            
+            const response = await api.get('/proxy/static/export');
+            
+            if (response.content) {
+                // 创建下载链接
+                const blob = new Blob([response.content], { type: 'text/plain' });
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = response.filename || 'static_proxies.txt';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                window.URL.revokeObjectURL(url);
+                
+                this.showToast(`成功导出${response.count}个静态代理`, 'success');
+            } else {
+                this.showToast('导出失败：没有找到代理数据', 'error');
+            }
+            
+        } catch (error) {
+            console.error('导出静态代理失败:', error);
+            this.showToast(error.message || '导出失败，请稍后再试', 'error');
+        }
+    }
+
+    async exportDynamicProxies() {
+        try {
+            this.showToast('正在导出动态代理...', 'info');
+            
+            const response = await api.get('/proxy/dynamic/export');
+            
+            if (response.content) {
+                // 创建下载链接
+                const blob = new Blob([response.content], { type: 'text/plain' });
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = response.filename || 'dynamic_keys.txt';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                window.URL.revokeObjectURL(url);
+                
+                this.showToast(`成功导出${response.count}个动态代理密钥`, 'success');
+            } else {
+                this.showToast('导出失败：没有找到代理数据', 'error');
+            }
+            
+        } catch (error) {
+            console.error('导出动态代理失败:', error);
+            this.showToast(error.message || '导出失败，请稍后再试', 'error');
         }
     }
 

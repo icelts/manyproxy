@@ -188,6 +188,7 @@ class App {
             
             // 显示新创建的API密钥
             this.showNewApiKey(result);
+            sessionController.updateApiKey(result.api_key);
             
         } catch (error) {
             console.error('创建API密钥失败:', error);
@@ -201,6 +202,7 @@ class App {
     async loadApiKeys() {
         try {
             const apiKeys = await api.getApiKeys();
+            this.syncApiKeyState(apiKeys);
             this.renderApiKeys(apiKeys);
         } catch (error) {
             console.error('加载API密钥失败:', error);
@@ -247,6 +249,15 @@ class App {
         `).join('');
     }
 
+    syncApiKeyState(apiKeys) {
+        const activeKey = (apiKeys || []).find(key => key.is_active) || apiKeys?.[0];
+        if (activeKey?.api_key) {
+            sessionController.updateApiKey(activeKey.api_key);
+        } else {
+            sessionController.updateApiKey(null);
+        }
+    }
+
     maskApiKey(apiKey) {
         if (!apiKey) return '';
         return apiKey.substring(0, 8) + '****' + apiKey.substring(apiKey.length - 4);
@@ -262,6 +273,7 @@ class App {
             this.showToast('API密钥已轮换', 'success');
             await this.loadApiKeys();
             this.showNewApiKey(result);
+            sessionController.updateApiKey(result.api_key);
         } catch (error) {
             console.error('轮换API密钥失败:', error);
             this.showToast(error.message || '轮换失败', 'error');

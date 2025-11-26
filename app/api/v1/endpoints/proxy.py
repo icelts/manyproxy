@@ -8,18 +8,18 @@ from app.schemas.proxy import (
 )
 from app.services.proxy_service import ProxyService
 from app.services.upstream_api import StaticProxyService
-from typing import Optional
+from typing import Optional, Literal
 
 router = APIRouter(prefix="/proxy", tags=["proxy"])
 
 
 def get_current_api_user(request: Request) -> int:
-    """从API Key中间件获取当前用户ID"""
+    """从中间件获取当前用户ID（仅支持API Key认证）"""
     user = getattr(request.state, "user", None)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="API key authentication required"
+            detail="API key required"
         )
     if not getattr(user, "is_active", True):
         raise HTTPException(
@@ -32,7 +32,8 @@ def get_current_api_user(request: Request) -> int:
 @router.get("/products", response_model=list[ProxyProductResponse])
 async def get_products(
     category: Optional[str] = Query(None, description="产品类别"),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    user_id: int = Depends(get_current_api_user)
 ):
     """获取产品列表"""
     products = await ProxyService.get_products(db, category)
@@ -185,11 +186,26 @@ async def change_proxy_security(
 @router.post("/static/{order_id}/renew")
 async def renew_static_proxy(
     order_id: str,
-    days: int = Query(..., ge=1, le=365, description="续费天数"),
     db: AsyncSession = Depends(get_db),
     user_id: int = Depends(get_current_api_user)):
-    """续费静态代理"""
-    return await ProxyService.renew_static_proxy(db, user_id, order_id, days)
+    """续费静态代理（按原套餐时长自动续费）"""
+    return await ProxyService.renew_static_proxy_auto(db, user_id, order_id)
+
+
+@router.get("/static/export")
+async def export_static_proxies(
+    db: AsyncSession = Depends(get_db),
+    user_id: int = Depends(get_current_api_user)):
+    """导出所有静态代理为txt格式"""
+    return await ProxyService.export_static_proxies(db, user_id)
+
+
+@router.get("/dynamic/export")
+async def export_dynamic_proxies(
+    db: AsyncSession = Depends(get_db),
+    user_id: int = Depends(get_current_api_user)):
+    """导出所有动态代理的key"""
+    return await ProxyService.export_dynamic_proxies(db, user_id)
 
 
 @router.get("/static/upstream-list")

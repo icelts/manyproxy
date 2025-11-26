@@ -33,10 +33,12 @@ class ProfilePage {
             if (activeKey) {
                 document.getElementById('api-key-display').value = activeKey.api_key;
                 document.getElementById('reset-api-key').dataset.keyId = activeKey.id;
+                sessionController.updateApiKey(activeKey.api_key);
             } else {
                 const created = await this.createApiKey(i18n?.t('profile.apiPlaceholder') || '默认密钥');
                 document.getElementById('api-key-display').value = created.api_key;
                 document.getElementById('reset-api-key').dataset.keyId = created.id;
+                sessionController.updateApiKey(created.api_key);
             }
         } catch (error) {
             this.handleAuthError(error, i18n?.t('profile.toast.loadFailed') || '无法获取 API 密钥');
@@ -67,6 +69,7 @@ class ProfilePage {
         try {
             const result = await api.createApiKey(name, 1000);
             this.showToast(i18n?.t('profile.toast.createSuccess') || '已创建新的 API 密钥', 'success');
+            sessionController.updateApiKey(result.api_key);
             return result;
         } catch (error) {
             this.handleAuthError(error, i18n?.t('profile.toast.loadFailed') || '创建 API 密钥失败');
@@ -91,6 +94,7 @@ class ProfilePage {
                 document.getElementById('reset-api-key').dataset.keyId = result.id;
             }
             document.getElementById('api-key-display').value = result.api_key;
+            sessionController.updateApiKey(result.api_key);
             this.showToast(i18n?.t('profile.toast.regenSuccess') || 'API 密钥已重新生成', 'success');
             bootstrap.Modal.getInstance(document.getElementById('resetApiKeyModal')).hide();
         } catch (error) {

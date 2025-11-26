@@ -17,7 +17,6 @@ from app.api.v1.api import api_router
 from app.services.session_service import SessionService
 from app.services.proxy_service import ProxyService
 from app.utils.cache import RateLimiter, init_redis
-from app.core.security import verify_token
 
 api_rate_limiter = RateLimiter()
 API_KEY_REQUIRED_PREFIXES = [
@@ -27,7 +26,7 @@ API_KEY_REQUIRED_PREFIXES = [
 # Logging
 # Configure logging (console + rotating file)
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.DEBUG,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger(__name__)
@@ -97,7 +96,7 @@ app.add_middleware(
 )
 
 
-# Request logging middleware
+# Request logging middleware (runs first - defined last)
 @app.middleware("http")
 async def request_logging_middleware(request: Request, call_next):
     """Log each incoming request with timing information."""
@@ -117,18 +116,17 @@ async def request_logging_middleware(request: Request, call_next):
     return response
 
 
-# API key auth middleware
+# API key auth middleware (runs second - defined first)
 @app.middleware("http")
 async def api_key_auth_middleware(request: Request, call_next):
     """API key auth and rate limit middleware."""
     request_id = getattr(request.state, "request_id", "N/A")
     path = request.url.path
-    # Skip auth for these prefixes
-    skip_auth_prefixes = [
-        "/api/v1/session/",
-        "/api/v1/docs",
-        "/api/v1/redoc",
-        "/api/v1/openapi.json",
+    
+    # Skip auth for these exact paths and prefixes
+    skip_auth_patterns = [
+        "/api/v1/session/login",
+        "/api/v1/session/register",
         "/docs",
         "/redoc",
         "/openapi.json",
@@ -140,7 +138,26 @@ async def api_key_auth_middleware(request: Request, call_next):
         "/pages/",
     ]
 
-    if any(path.startswith(prefix) for prefix in skip_auth_prefixes):
+    # Check if path matches any skip pattern (exact match or prefix match)
+    should_skip = False
+    for pattern in skip_auth_patterns:
+        if pattern == '/':
+            # Special case: root path should only match exactly
+            if path == pattern:
+                should_skip = True
+                break
+        elif pattern.endswith('/'):
+            # Directory prefix match
+            if path.startswith(pattern):
+                should_skip = True
+                break
+        else:
+            # Exact match
+            if path == pattern:
+                should_skip = True
+                break
+
+    if should_skip:
         logger.debug("[%s] %s skipped auth (public path)", request_id, path)
         return await call_next(request)
 
@@ -149,31 +166,15 @@ async def api_key_auth_middleware(request: Request, call_next):
         logger.debug("[%s] %s not in protected prefixes, skipping API key check", request_id, path)
         return await call_next(request)
 
-    async def authenticate_with_jwt():
-        auth_header = request.headers.get("Authorization")
-        if not auth_header:
-            return None
-        scheme, _, token = auth_header.partition(" ")
-        if scheme.lower() != "bearer" or not token:
-            return None
-        payload = verify_token(token.strip())
-        if not payload:
-            return None
-        username = payload.get("sub")
-        if not username:
-            return None
-        async with AsyncSessionLocal() as db:
-            user_obj = await SessionService.get_user_by_username(db, username)
-        if not user_obj or not user_obj.is_active:
-            return None
-        return user_obj
-
     api_key_info = None
     user = None
     auth_type = None
     api_key = request.headers.get("X-API-Key")
 
+    # 仅使用API Key认证，不再支持JWT认证
     if api_key:
+        # API key认证
+        logger.debug("[%s] %s attempting API key authentication with key: %s", request_id, path, api_key[:10] + "...")
         async with AsyncSessionLocal() as db:
             api_key_info = await SessionService.get_api_key_info(db, api_key)
             if not api_key_info:
@@ -190,12 +191,11 @@ async def api_key_auth_middleware(request: Request, call_next):
             logger.warning("[%s] %s API key %s exceeded rate limit (%s req/min)", request_id, path, api_key, rate_limit)
             return JSONResponse(status_code=429, content={"detail": "Rate limit exceeded"})
         auth_type = "api_key"
+        logger.info("[%s] %s API key authentication successful for user_id=%s", request_id, path, user.id)
     else:
-        user = await authenticate_with_jwt()
-        if not user:
-            logger.warning("[%s] %s missing valid authentication for protected endpoint", request_id, path)
-            return JSONResponse(status_code=401, content={"detail": "API key or valid token required"})
-        auth_type = "jwt"
+        # 没有API Key，认证失败
+        logger.warning("[%s] %s missing API key for protected endpoint", request_id, path)
+        return JSONResponse(status_code=401, content={"detail": "API key required"})
 
     request.state.user = user
     request.state.user_id = user.id

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -56,7 +56,7 @@ async def get_current_admin_user(current_user: User = Depends(get_current_active
 async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
     """注册并立即返回会话状态。"""
     user = await SessionService.register_user(db, user_data)
-    return SessionService.build_session_envelope(user)
+    return await SessionService.build_session_envelope(user, db=db)
 
 
 @router.post("/login", response_model=SessionEnvelope)
@@ -69,17 +69,33 @@ async def login(login_data: SessionLogin, db: AsyncSession = Depends(get_db)):
             detail="Incorrect username or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    return SessionService.build_session_envelope(user)
+    return await SessionService.build_session_envelope(user, db=db)
 
 
 @router.get("/state", response_model=SessionEnvelope)
 async def session_state(
-    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
     credentials: HTTPAuthorizationCredentials = Depends(security),
 ):
     """获取当前用户的统一会话状态。"""
-    token = credentials.credentials if credentials else None
-    return SessionService.build_session_envelope(current_user, existing_token=token)
+    if not credentials or not credentials.credentials:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    user = await SessionService.resolve_user_from_token(db, credentials.credentials)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    if not user.is_active:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Inactive user")
+    
+    return await SessionService.build_session_envelope(user, existing_token=credentials.credentials, db=db)
 
 
 @router.post("/logout", response_model=SessionLogoutResponse)

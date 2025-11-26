@@ -23,6 +23,9 @@ PROXY_PRODUCTS = [
         "product_name": "Viettel 静态家庭代理",
         "description": "越南Viettel运营商静态家庭代理，稳定可靠，适合长期使用",
         "price": Decimal("15.00"),
+        "price_30": Decimal("15.00"),
+        "price_60": Decimal("28.00"),
+        "price_90": Decimal("40.00"),
         "duration_days": 30,
         "stock": 100,
         "is_active": True
@@ -34,6 +37,9 @@ PROXY_PRODUCTS = [
         "product_name": "FPT 静态家庭代理",
         "description": "越南FPT运营商静态家庭代理，速度快，性能优秀",
         "price": Decimal("12.00"),
+        "price_30": Decimal("12.00"),
+        "price_60": Decimal("23.00"),
+        "price_90": Decimal("34.00"),
         "duration_days": 30,
         "stock": 100,
         "is_active": True
@@ -45,6 +51,9 @@ PROXY_PRODUCTS = [
         "product_name": "VNPT 静态家庭代理",
         "description": "越南VNPT运营商静态家庭代理，覆盖面广",
         "price": Decimal("13.00"),
+        "price_30": Decimal("13.00"),
+        "price_60": Decimal("25.00"),
+        "price_90": Decimal("36.00"),
         "duration_days": 30,
         "stock": 100,
         "is_active": True

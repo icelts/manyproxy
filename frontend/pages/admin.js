@@ -50,7 +50,10 @@ class AdminPage {
         document.querySelectorAll('.nav-link[data-tab]').forEach(link => {
             link.addEventListener('click', (e) => {
                 e.preventDefault();
-                this.switchTab(e.target.dataset.tab);
+                const tab = e.currentTarget?.dataset?.tab || e.target.closest('[data-tab]')?.dataset?.tab;
+                if (tab) {
+                    this.switchTab(tab);
+                }
             });
         });
 
@@ -144,6 +147,9 @@ class AdminPage {
 
     async checkAdminAccess() {
         await sessionController.initialized;
+        if (!sessionController.isAuthenticated()) {
+            await sessionController.safeRefresh();
+        }
         if (!sessionController.isAuthenticated()) {
             alert('登录状态已失效，请重新登录');
             window.location.href = '../pages/login.html';
@@ -929,7 +935,7 @@ class AdminPage {
                         <button class="btn btn-sm btn-outline" onclick="window.adminPage.toggleProduct(${product.id})" title="切换状态">
                             <i class="fas fa-${product.is_active ? 'ban' : 'check'}"></i>
                         </button>
-                        <button class="btn btn-sm btn-outline text-danger" onclick="adminPage.deleteProduct(${product.id})" title="删除">
+                        <button class="btn btn-sm btn-outline text-danger" onclick="window.adminPage.deleteProduct(${product.id})" title="删除">
                             <i class="fas fa-trash"></i>
                         </button>
                     </div>
@@ -1068,6 +1074,7 @@ class AdminPage {
             
             // 先更新子类别选项，再设置值
             this.updateSubcategoryOptions(product.category);
+            this.updateProviderFieldState(product.category, product.provider);
             document.getElementById('productSubcategory').value = product.subcategory || '';
             
             document.getElementById('productName').value = product.product_name;
@@ -1075,6 +1082,12 @@ class AdminPage {
             document.getElementById('productDuration').value = product.duration_days;
             document.getElementById('productStock').value = product.stock;
             document.getElementById('productDescription').value = product.description || '';
+            const price30Input = document.getElementById('productPrice30');
+            const price60Input = document.getElementById('productPrice60');
+            const price90Input = document.getElementById('productPrice90');
+            if (price30Input) price30Input.value = product.price_30 ?? '';
+            if (price60Input) price60Input.value = product.price_60 ?? '';
+            if (price90Input) price90Input.value = product.price_90 ?? '';
             document.getElementById('productIsActive').checked = product.is_active;
             
             document.getElementById('productModalTitle').innerHTML = '<i class="fas fa-edit"></i> 编辑代理产品';
@@ -1092,32 +1105,66 @@ class AdminPage {
         document.getElementById('productForm').reset();
         document.getElementById('productId').value = '';
         document.getElementById('productIsActive').checked = true;
-        // 重置子类别选项
+        const price30 = document.getElementById('productPrice30');
+        const price60 = document.getElementById('productPrice60');
+        const price90 = document.getElementById('productPrice90');
+        if (price30) price30.value = '';
+        if (price60) price60.value = '';
+        if (price90) price90.value = '';
         this.updateSubcategoryOptions('');
+        this.updateProviderFieldState('', '');
     }
+
 
     async saveProduct() {
         const productId = document.getElementById('productId').value;
         const isEdit = !!productId;
         
+        const category = document.getElementById('productCategory').value;
+        const providerInput = document.getElementById('productProvider');
+        const rawProvider = providerInput?.value?.trim() || '';
+        const normalizedProvider = category === 'static'
+            ? ((providerInput?.disabled || !rawProvider) ? 'generic' : rawProvider)
+            : rawProvider;
+
         const productData = {
-            category: document.getElementById('productCategory').value,
-            provider: document.getElementById('productProvider').value,
+            category,
+            provider: normalizedProvider,
             subcategory: document.getElementById('productSubcategory').value || null,
             product_name: document.getElementById('productName').value,
-            price: parseFloat(document.getElementById('productPrice').value),
-            duration_days: parseInt(document.getElementById('productDuration').value),
-            stock: parseInt(document.getElementById('productStock').value) || 0,
+            price: this.parseNumericInput('productPrice'),
+            duration_days: this.parseIntegerInput('productDuration'),
+            stock: this.parseIntegerInput('productStock', 0),
             description: document.getElementById('productDescription').value || null,
             is_active: document.getElementById('productIsActive').checked
         };
-        
-        // 验证必填字段
-        if (!productData.category || !productData.provider || !productData.product_name) {
+
+        // 静态代理也使用简单的单价格模式
+        if (category === 'static') {
+            if (productData.price === null) {
+                this.showToast('请提供有效的价格', 'error');
+                return;
+            }
+            if (productData.duration_days === null) {
+                productData.duration_days = 30; // 默认30天
+            }
+        }
+
+        if (!productData.category || !productData.product_name) {
             this.showToast('请填写必填字段', 'error');
             return;
         }
-        
+
+        if (category !== 'static' && !productData.provider) {
+            this.showToast('请指定提供商', 'error');
+            return;
+        }
+
+        if (productData.price === null || productData.duration_days === null) {
+            this.showToast('请提供有效的价格和时长', 'error');
+            return;
+        }
+
         try {
             this.showLoading();
             
@@ -1126,7 +1173,7 @@ class AdminPage {
                 this.showToast('产品更新成功', 'success');
             } else {
                 await api.post('/admin/proxy-products', productData);
-                this.showToast('产品添加成功', 'success');
+                this.showToast('产品创建成功', 'success');
             }
             
             this.closeModal('productModal');
@@ -1134,12 +1181,11 @@ class AdminPage {
             
         } catch (error) {
             console.error('Failed to save product:', error);
-            this.showToast(isEdit ? '更新产品失败' : '添加产品失败', 'error');
+            this.showToast(isEdit ? '更新产品失败' : '创建产品失败', 'error');
         } finally {
             this.hideLoading();
         }
     }
-
     async toggleProduct(productId) {
         try {
             this.showLoading();
@@ -1179,25 +1225,22 @@ class AdminPage {
     // 根据产品类别更新子类别选项
     updateSubcategoryOptions(category) {
         const subcategorySelect = document.getElementById('productSubcategory');
-        
-        // 清空现有选项
-        subcategorySelect.innerHTML = '<option value="">请选择子类别</option>';
-        
-        // 根据类别添加对应的子类别选项
+        subcategorySelect.innerHTML = '<option value="">Select subcategory</option>';
+
         const subcategoryOptions = {
             'static': [
-                { value: 'home', text: '静态家庭代理' },
-                { value: 'vn_datacenter', text: '静态越南机房代理' },
-                { value: 'us_datacenter', text: '静态美国机房代理' }
+                { value: 'home', text: 'Residential (home)' },
+                { value: 'vn_datacenter', text: 'Vietnam datacenter' },
+                { value: 'us_datacenter', text: 'US datacenter' }
             ],
             'dynamic': [
-                { value: 'home', text: '动态家庭代理' }
+                { value: 'home', text: 'Residential (home)' }
             ],
             'mobile': [
-                { value: 'mobile', text: '移动手机代理' }
+                { value: 'mobile', text: 'Mobile proxy' }
             ]
         };
-        
+
         if (subcategoryOptions[category]) {
             subcategoryOptions[category].forEach(option => {
                 const optionElement = document.createElement('option');
@@ -1206,6 +1249,87 @@ class AdminPage {
                 subcategorySelect.appendChild(optionElement);
             });
         }
+
+        this.toggleStaticPricingFields(category === 'static');
+        this.updateProviderFieldState(category, document.getElementById('productProvider').value);
+    }
+
+    toggleStaticPricingFields(enable) {
+        const staticFields = document.getElementById('staticPricingFields');
+        const generalFields = document.getElementById('generalPricingFields');
+        const priceInput = document.getElementById('productPrice');
+        const durationInput = document.getElementById('productDuration');
+
+        // 静态代理也使用通用定价字段，不再显示多时长设置
+        if (staticFields && generalFields) {
+            staticFields.classList.add('d-none');
+            generalFields.classList.remove('d-none');
+            if (priceInput) priceInput.required = true;
+            if (durationInput) durationInput.required = true;
+        }
+    }
+
+    updateProviderFieldState(category, providerValue = '') {
+        const providerInput = document.getElementById('productProvider');
+        const providerHelp = document.getElementById('providerHelpText');
+        if (!providerInput) return;
+
+        // 对于静态代理，也允许编辑提供商字段
+        if (category === 'static') {
+            providerInput.disabled = false;
+            providerInput.placeholder = '如: Viettel, FPT, VNPT, US, DatacenterA, DatacenterB, DatacenterC';
+            if (providerHelp) {
+                providerHelp.textContent = '静态代理提供商：Viettel, FPT, VNPT, US, DatacenterA, DatacenterB, DatacenterC, GoiViettel, GoiVNPT, GoiDATACENTER';
+                providerHelp.classList.remove('d-none');
+            }
+            // 如果没有提供值，设置为空而不是默认值
+            if (!providerValue) {
+                providerInput.value = '';
+            } else {
+                providerInput.value = providerValue;
+            }
+        } else {
+            providerInput.disabled = false;
+            providerInput.placeholder = '如: Viettel, FPT, VNPT';
+            if (providerHelp) providerHelp.classList.add('d-none');
+            providerInput.value = providerValue || '';
+        }
+    }
+
+    parseNumericInput(elementId) {
+        const element = document.getElementById(elementId);
+        if (!element) return null;
+        const rawValue = (element.value || '').trim();
+        if (rawValue === '') return null;
+        const parsed = parseFloat(rawValue);
+        return Number.isNaN(parsed) ? null : parsed;
+    }
+
+    parseIntegerInput(elementId, defaultValue = null) {
+        const element = document.getElementById(elementId);
+        if (!element) return defaultValue;
+        const rawValue = (element.value || '').trim();
+        if (rawValue === '') return defaultValue;
+        const parsed = parseInt(rawValue, 10);
+        return Number.isNaN(parsed) ? defaultValue : parsed;
+    }
+
+    parseNumericInput(elementId) {
+        const element = document.getElementById(elementId);
+        if (!element) return null;
+        const rawValue = (element.value || '').trim();
+        if (rawValue === '') return null;
+        const parsed = parseFloat(rawValue);
+        return Number.isNaN(parsed) ? null : parsed;
+    }
+
+    parseIntegerInput(elementId, defaultValue = null) {
+        const element = document.getElementById(elementId);
+        if (!element) return defaultValue;
+        const rawValue = (element.value || '').trim();
+        if (rawValue === '') return defaultValue;
+        const parsed = parseInt(rawValue, 10);
+        return Number.isNaN(parsed) ? defaultValue : parsed;
     }
 
     // 产品映射管理相关方法
@@ -1342,7 +1466,7 @@ class AdminPage {
                         <button class="btn btn-sm btn-outline" onclick="window.adminPage.toggleMapping(${mapping.id})" title="切换状态">
                             <i class="fas fa-${mapping.is_active ? 'ban' : 'check'}"></i>
                         </button>
-                        <button class="btn btn-sm btn-outline text-danger" onclick="adminPage.deleteMapping(${mapping.id})" title="删除">
+                        <button class="btn btn-sm btn-outline text-danger" onclick="window.adminPage.deleteMapping(${mapping.id})" title="删除">
                             <i class="fas fa-trash"></i>
                         </button>
                     </div>
@@ -1615,7 +1739,7 @@ class AdminPage {
                         <button class="btn btn-sm btn-outline" onclick="window.adminPage.toggleProvider(${provider.id})" title="切换状态">
                             <i class="fas fa-${provider.is_active ? 'ban' : 'check'}"></i>
                         </button>
-                        <button class="btn btn-sm btn-outline text-danger" onclick="adminPage.deleteProvider(${provider.id})" title="删除">
+                        <button class="btn btn-sm btn-outline text-danger" onclick="window.adminPage.deleteProvider(${provider.id})" title="删除">
                             <i class="fas fa-trash"></i>
                         </button>
                     </div>

@@ -14,7 +14,7 @@ class ProxyProduct(Base):
     product_name = Column(String(100), nullable=False)
     description = Column(Text)
     price = Column(DECIMAL(10, 2), nullable=False)
-    duration_days = Column(Integer, default=30)
+    duration_days = Column(Integer, nullable=False)  # 管理员设置的固定时长
     stock = Column(Integer, default=0)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

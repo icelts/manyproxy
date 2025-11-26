@@ -1,0 +1,138 @@
+TopProxy 静态家庭代理 API 指南
+================================
+
+本文档整理了 `https://topproxy.vn/apiv2/` 提供的静态住宅代理（VNPT / Viettel / FPT）购买、修改认证及续费接口，便于在 ManyProxy 中对接上游服务。
+
+通用说明
+--------
+- **请求方式**：所有接口均支持 `GET` 或 `POST`（本文示例使用 GET，生产环境建议使用 POST 并通过 HTTPS 发送）。
+- **认证参数**：`key` 为上游账号的 API Key，示例值 `AcPHxnLQlmwzMbfoYKMifO` 需替换成真实 Key。
+- **代理类型**：`loaiproxy` 取值 `VNPT`、`Viettel` 或 `FPT`，对应不同供应商。
+- **协议**：`type` 参数接受 `HTTP` 或 `SOCKS5`。返回字段 `type` 可能显示 `HTTPS`，代表 HTTP(S) 代理。
+- **返回时间**：响应中的 `time` 为到期时间的 Unix Time（秒）。
+- **idproxy**：购买成功时返回的代理标识，后续修改认证和续费都必须携带。
+
+1. 购买代理（muaproxy.php）
+---------------------------
+```
+Endpoint: https://topproxy.vn/apiv2/muaproxy.php
+Method: GET / POST
+```
+
+| 参数名      | 必填 | 说明                                                                 |
+|------------|------|----------------------------------------------------------------------|
+| `key`      | 是   | API Key                                                               |
+| `loaiproxy`| 是   | 供应商：`VNPT` / `Viettel` / `FPT`                                     |
+| `soluong`  | 是   | 购买数量（整型）                                                      |
+| `ngay`     | 是   | 购买天数                                                              |
+| `type`     | 是   | `HTTP` 或 `SOCKS5`                                                    |
+| `user`     | 是   | 想要设置的代理用户名                                                  |
+| `password` | 是   | 想要设置的代理密码                                                    |
+
+示例请求：
+```
+https://topproxy.vn/apiv2/muaproxy.php?loaiproxy=VNPT&key=AcPHxnLQlmwzMbfoYKMifO&soluong=1&ngay=1&type=HTTP&user=random&password=random
+```
+
+成功响应（`status = 100`）：
+```json
+{
+  "status": 100,
+  "loaiproxy": "Viettel",
+  "idproxy": 2772,
+  "ip": "27.73.88.211",
+  "port": 35270,
+  "user": "mdtrong",
+  "password": "pass",
+  "type": "HTTPS",
+  "proxy": "27.73.88.211:35270:mdtrong:pass",
+  "time": 1726675021
+}
+```
+若一次性购买多条，成功后还会返回：
+```json
+{ "status": 200, "comen": "You have successfully purchased 2" }
+```
+
+错误码：  
+`101` Key 不存在；`102` 余额不足；`103` 库存不足；`104` 未知错误；`201` 购买成功但数量不足。
+
+2. 修改认证信息（doibaomat.php）
+--------------------------------
+```
+Endpoint: https://topproxy.vn/apiv2/doibaomat.php
+Method: GET / POST
+```
+
+| 参数名       | 必填 | 说明                                         |
+|-------------|------|----------------------------------------------|
+| `key`       | 是   | API Key                                      |
+| `loaiproxy` | 是   | 供应商：`VNPT` / `Viettel` / `FPT`            |
+| `idproxy`   | 是   | 购买返回的代理 ID                             |
+| `type`      | 是   | `HTTP` 或 `SOCKS5`                           |
+| `user`      | 是   | 新的代理用户名                               |
+| `password`  | 是   | 新的代理密码                                 |
+
+示例：
+```
+https://topproxy.vn/apiv2/doibaomat.php?loaiproxy=Viettel&key=AcPHxnLQlmwzMbfoYKMifO&type=HTTP&user=newuser&password=newpass&idproxy=2772
+```
+
+成功响应（`status = 100`）返回最新的代理信息：
+```json
+{
+  "status": 100,
+  "loaiproxy": "Viettel",
+  "idproxy": 2772,
+  "ip": "27.73.88.211",
+  "port": 35270,
+  "user": "newuser",
+  "password": "newpass",
+  "type": "HTTPS",
+  "proxy": "27.73.88.211:35270:newuser:newpass"
+}
+```
+
+3. 续费代理（giahanproxy.php）
+-----------------------------
+```
+Endpoint: https://topproxy.vn/apiv2/giahanproxy.php
+Method: GET / POST
+```
+
+| 参数名       | 必填 | 说明                                         |
+|-------------|------|----------------------------------------------|
+| `key`       | 是   | API Key                                      |
+| `loaiproxy` | 是   | 供应商：`VNPT` / `Viettel` / `FPT`            |
+| `idproxy`   | 是   | 购买返回的代理 ID                             |
+| `ngay`      | 是   | 续费天数                                     |
+
+示例：
+```
+https://topproxy.vn/apiv2/giahanproxy.php?loaiproxy=VNPT&key=AcPHxnLQlmwzMbfoYKMifO&ngay=1&idproxy=2772
+```
+
+成功响应（`status = 100`）：
+```json
+{
+  "status": 100,
+  "idproxy": 2772,
+  "time": 1726675021
+}
+```
+
+错误码：`101` Key 不存在；`102` 余额不足；`104` 未知错误。
+
+4. 常见状态码
+-------------
+| 状态码 | 描述                                     |
+|--------|------------------------------------------|
+| 100    | 操作成功                                 |
+| 200    | 批量购买成功（返回数量说明）             |
+| 101    | Key 不存在或无效                         |
+| 102    | 余额不足                                 |
+| 103    | 指定类型代理缺货（仅购买接口返回）       |
+| 104    | 未知错误                                 |
+| 201    | 购买成功，但数量不足（部分交付）         |
+
+如需在 ManyProxy 中使用，请在后端请求上游成功后，将 `idproxy / proxy / time` 等字段落库并反馈给用户，供后续续费与安全信息修改使用。

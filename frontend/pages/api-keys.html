@@ -90,13 +90,18 @@
 
     <!-- JavaScript -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="../js/config.js"></script>
     <script src="../js/api.js"></script>
+    <script src="../js/auth.js?v=2"></script>
     <script src="../components/navbar.js?v=2"></script>
     
     <script>
         // 加载导航栏
         document.addEventListener('DOMContentLoaded', async function() {
             await sessionController.initialized;
+            if (!sessionController.isAuthenticated()) {
+                await sessionController.safeRefresh();
+            }
             if (!sessionController.isAuthenticated()) {
                 window.location.href = 'login.html';
                 return;
@@ -131,7 +136,7 @@
 
         // 初始化API密钥页面
         function initApiKeysPage() {
-            const storage = window.secureStorage || window.sessionStorage;
+            const storage = window.secureStorage || window.localStorage || window.sessionStorage;
             const token = storage.getItem(config.getStorageKey('tokenKey'));
             
             if (!token) {
@@ -147,6 +152,7 @@
         async function loadApiKeys() {
             try {
                 const apiKeys = await api.getApiKeys();
+                syncActiveApiKey(apiKeys);
                 renderApiKeys(apiKeys);
             } catch (error) {
                 console.error('加载API密钥失败:', error);
@@ -225,6 +231,7 @@
                 
                 // 显示新创建的API密钥
                 showNewApiKey(result);
+                sessionController.updateApiKey(result.api_key);
                 
             } catch (error) {
                 console.error('创建API密钥失败:', error);
@@ -246,6 +253,7 @@
                 showToast('API密钥已轮换', 'success');
                 await loadApiKeys();
                 showNewApiKey(result);
+                sessionController.updateApiKey(result.api_key);
             } catch (error) {
                 console.error('轮换API密钥失败:', error);
                 showToast(error.message || '轮换失败', 'error');
@@ -313,6 +321,15 @@
             modal.addEventListener('hidden.bs.modal', () => {
                 document.body.removeChild(modal);
             });
+        }
+
+        function syncActiveApiKey(apiKeys) {
+            const activeKey = (apiKeys || []).find(key => key.is_active) || apiKeys?.[0];
+            if (activeKey?.api_key) {
+                sessionController.updateApiKey(activeKey.api_key);
+            } else {
+                sessionController.updateApiKey(null);
+            }
         }
 
         // 隐藏API密钥

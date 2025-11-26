@@ -109,8 +109,15 @@
                 loginBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>登录中...';
 
                 try {
-                    await sessionController.login(username, password);
+                    const sessionData = await sessionController.login(username, password);
                     showToast('登录成功', 'success');
+                    
+                    // 如果登录返回了API Key，设置API Key用于后续API调用
+                    if (sessionData.api_key) {
+                        api.setApiKey(sessionData.api_key);
+                        console.log('API Key已设置，将用于后续API调用');
+                    }
+                    
                     setTimeout(() => {
                         const target = sessionController.isAdmin() ? 'admin.html' : 'dashboard.html';
                         window.location.href = target;

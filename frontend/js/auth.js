@@ -1,4 +1,4 @@
-const sessionStorageEngine = window.secureStorage || window.sessionStorage;
+const sessionStorageEngine = window.secureStorage || window.localStorage || window.sessionStorage;
 
 class SessionController {
     constructor(storage = sessionStorageEngine) {
@@ -19,6 +19,9 @@ class SessionController {
                 if (this.state?.token) {
                     api.setToken(this.state.token);
                 }
+                if (this.state?.api_key) {
+                    api.setApiKey(this.state.api_key);
+                }
             } catch (error) {
                 console.warn('Failed to parse cached session', error);
                 this.storage.removeItem(this.sessionKey);
@@ -34,11 +37,24 @@ class SessionController {
     }
 
     async safeRefresh() {
+        if (this.isRefreshing) {
+            console.log('Already refreshing, skipping...');
+            return;
+        }
+        
+        this.isRefreshing = true;
         try {
             await this.refresh();
         } catch (error) {
             console.warn('Session refresh failed', error);
+            // 如果是500错误，不要清除状态，保持现有登录状态
+            if (error.message && error.message.includes('500')) {
+                console.log('Session state 500 error, keeping current session');
+                return;
+            }
             this.clearState();
+        } finally {
+            this.isRefreshing = false;
         }
     }
 
@@ -61,17 +77,29 @@ class SessionController {
     }
 
     setState(envelope) {
-        if (!envelope || !envelope.token) {
+        // 支持API Key登录，此时可能没有token
+        if (!envelope || (!envelope.token && !envelope.api_key)) {
             throw new Error('Invalid session envelope');
         }
 
         this.state = envelope;
         this.storage.setItem(this.sessionKey, JSON.stringify(envelope));
-        this.storage.setItem(this.tokenKey, envelope.token);
+        
+        if (envelope.token) {
+            this.storage.setItem(this.tokenKey, envelope.token);
+        }
+        
+        if (envelope.api_key) {
+            api.setApiKey(envelope.api_key);
+        }
+        
         this.storage.setItem('username', envelope.user?.username || '');
         this.storage.setItem(this.userKey, JSON.stringify(envelope.user || {}));
 
-        api.setToken(envelope.token);
+        if (envelope.token) {
+            api.setToken(envelope.token);
+        }
+        
         this.emitChange();
     }
 
@@ -80,6 +108,21 @@ class SessionController {
         this.storage.removeItem(this.sessionKey);
         this.storage.removeItem('username');
         api.clearAuth();
+        this.emitChange();
+    }
+
+    updateApiKey(apiKey) {
+        if (!this.state) {
+            this.state = {
+                api_key: null,
+                user: null,
+                abilities: {},
+                pages: {},
+            };
+        }
+        this.state.api_key = apiKey || null;
+        this.storage.setItem(this.sessionKey, JSON.stringify(this.state));
+        api.setApiKey(apiKey || null);
         this.emitChange();
     }
 
@@ -140,9 +183,48 @@ class SessionController {
             this.clearState();
             return null;
         }
-        const envelope = await api.getSessionState();
-        this.setState(envelope);
-        return envelope;
+        api.setToken(token);
+        try {
+            const envelope = await api.getSessionState();
+            this.setState(envelope);
+            return envelope;
+        } catch (error) {
+            console.warn('Session state refresh failed, but keeping token:', error);
+            // 如果session state失败，但token存在，创建一个基本的session state
+            const username = this.storage.getItem('username');
+            if (username && token) {
+                const basicEnvelope = {
+                    token: token,
+                    token_type: "bearer",
+                    api_key: this.storage.getItem(config.getStorageKey('apiKeyKey')),
+                    user: {
+                        username: username,
+                        is_active: true
+                    },
+                    abilities: {
+                        can_purchase: true,
+                        can_use_api: true,
+                        can_manage_platform: false,
+                        can_access_admin: false
+                    },
+                    pages: {
+                        dashboard: { allowed: true, reason: null },
+                        proxy: { allowed: true, reason: null },
+                        products: { allowed: true, reason: null },
+                        orders: { allowed: true, reason: null },
+                        "api-keys": { allowed: true, reason: null },
+                        profile: { allowed: true, reason: null },
+                        admin: { allowed: false, reason: "ADMIN_ONLY" }
+                    },
+                    refreshed_at: new Date().toISOString()
+                };
+                this.setState(basicEnvelope);
+                return basicEnvelope;
+            } else {
+                this.clearState();
+                return null;
+            }
+        }
     }
 
     async logout(options = {}) {
@@ -159,6 +241,9 @@ class SessionController {
 
     async ensurePage(pageName, { redirectTo, message } = {}) {
         await this.initialized;
+        if (!this.isAuthenticated()) {
+            await this.safeRefresh();
+        }
         if (this.canAccess(pageName)) {
             return true;
         }

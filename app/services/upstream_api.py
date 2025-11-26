@@ -16,7 +16,56 @@ class UpstreamAPIService:
             async with httpx.AsyncClient(timeout=30.0) as client:
                 response = await client.request(method, url, **kwargs)
                 response.raise_for_status()
-                return response.json()
+                
+                # 获取响应文本
+                text = response.text
+                logger.info(f"上游API原始响应: {text}")
+                
+                # 尝试解析JSON
+                try:
+                    return response.json()
+                except Exception as json_error:
+                    # 如果JSON解析失败，尝试手动解析
+                    logger.warning(f"JSON解析失败，尝试手动解析: {json_error}")
+                    
+                    # 查找所有JSON对象
+                    import re
+                    import json
+                    
+                    # 查找所有JSON对象
+                    json_matches = re.findall(r'\{[^{}]*\}', text, re.DOTALL)
+                    
+                    if json_matches:
+                        # 如果有多个JSON对象，取第一个（通常包含关键信息）
+                        first_json = json_matches[0]
+                        try:
+                            parsed = json.loads(first_json)
+                            logger.info(f"成功解析第一个JSON对象: {parsed}")
+                            return parsed
+                        except json.JSONDecodeError:
+                            pass
+                        
+                        # 如果第一个解析失败，尝试合并所有JSON
+                        try:
+                            # 尝试解析所有JSON并合并
+                            all_data = {}
+                            for match in json_matches:
+                                try:
+                                    data = json.loads(match)
+                                    all_data.update(data)
+                                except:
+                                    continue
+                            
+                            if all_data:
+                                logger.info(f"成功合并所有JSON对象: {all_data}")
+                                return all_data
+                        except:
+                            pass
+                    
+                    # 如果都失败了，返回原始文本
+                    logger.warning("无法解析JSON，返回原始响应")
+                    return {"raw_response": text, "status": "unknown"}
+                        
         except httpx.HTTPError as e:
             logger.error(f"HTTP request failed: {e}")
             raise
@@ -29,7 +78,11 @@ class StaticProxyService(UpstreamAPIService):
     """静态代理服务 - 基于topproxy.vn API"""
     
     BASE_URL = "https://topproxy.vn/apiv2"
-    API_KEY = settings.TOPPROXY_KEY
+    
+    @classmethod
+    def get_api_key(cls):
+        """动态获取API密钥"""
+        return settings.TOPPROXY_KEY
     
     # 支持的代理类型
     SUPPORTED_PROVIDERS = [
@@ -56,9 +109,17 @@ class StaticProxyService(UpstreamAPIService):
         Returns:
             API响应结果
         """
+        # 动态获取API密钥
+        api_key = cls.get_api_key()
+        
+        # 检查API密钥
+        if not api_key:
+            logger.error("TOPPROXY_KEY 未设置，无法调用上游API")
+            raise ValueError("TOPPROXY_KEY 未配置，请联系管理员设置上游API密钥")
+        
         url = f"{cls.BASE_URL}/muaproxy.php"
         params = {
-            "key": cls.API_KEY,
+            "key": api_key,
             "loaiproxy": provider,
             "soluong": quantity,
             "ngay": days,
@@ -67,7 +128,16 @@ class StaticProxyService(UpstreamAPIService):
             "password": password
         }
         
-        return await cls._make_request("GET", url, params=params)
+        logger.info(f"调用上游API购买代理: {url}")
+        logger.info(f"参数: {params}")
+        
+        try:
+            result = await cls._make_request("GET", url, params=params)
+            logger.info(f"上游API响应: {result}")
+            return result
+        except Exception as e:
+            logger.error(f"上游API调用失败: {e}")
+            raise
     
     @classmethod
     async def change_proxy(cls, provider: str, target_provider: str, proxy_id: int,
@@ -87,9 +157,17 @@ class StaticProxyService(UpstreamAPIService):
         Returns:
             API响应结果
         """
+        # 动态获取API密钥
+        api_key = cls.get_api_key()
+        
+        # 检查API密钥
+        if not api_key:
+            logger.error("TOPPROXY_KEY 未设置，无法调用上游API")
+            raise ValueError("TOPPROXY_KEY 未配置，请联系管理员设置上游API密钥")
+        
         url = f"{cls.BASE_URL}/doiproxy.php"
         params = {
-            "key": cls.API_KEY,
+            "key": api_key,
             "loaiproxy": provider,
             "loaiproxynhan": target_provider,
             "idproxy": proxy_id,
@@ -98,7 +176,16 @@ class StaticProxyService(UpstreamAPIService):
             "password": password
         }
         
-        return await cls._make_request("GET", url, params=params)
+        logger.info(f"调用上游API更换代理: {url}")
+        logger.info(f"参数: {params}")
+        
+        try:
+            result = await cls._make_request("GET", url, params=params)
+            logger.info(f"上游API响应: {result}")
+            return result
+        except Exception as e:
+            logger.error(f"上游API调用失败: {e}")
+            raise
     
     @classmethod
     async def change_proxy_security(cls, provider: str, proxy_id: int, 
@@ -117,9 +204,17 @@ class StaticProxyService(UpstreamAPIService):
         Returns:
             API响应结果
         """
+        # 动态获取API密钥
+        api_key = cls.get_api_key()
+        
+        # 检查API密钥
+        if not api_key:
+            logger.error("TOPPROXY_KEY 未设置，无法调用上游API")
+            raise ValueError("TOPPROXY_KEY 未配置，请联系管理员设置上游API密钥")
+        
         url = f"{cls.BASE_URL}/doibaomat.php"
         params = {
-            "key": cls.API_KEY,
+            "key": api_key,
             "loaiproxy": provider,
             "idproxy": proxy_id,
             "type": protocol,
@@ -127,7 +222,16 @@ class StaticProxyService(UpstreamAPIService):
             "password": password
         }
         
-        return await cls._make_request("GET", url, params=params)
+        logger.info(f"调用上游API更改代理安全信息: {url}")
+        logger.info(f"参数: {params}")
+        
+        try:
+            result = await cls._make_request("GET", url, params=params)
+            logger.info(f"上游API响应: {result}")
+            return result
+        except Exception as e:
+            logger.error(f"上游API调用失败: {e}")
+            raise
     
     @classmethod
     async def renew_proxy(cls, provider: str, proxy_id: int, days: int) -> Dict[str, Any]:
@@ -142,15 +246,32 @@ class StaticProxyService(UpstreamAPIService):
         Returns:
             API响应结果
         """
+        # 动态获取API密钥
+        api_key = cls.get_api_key()
+        
+        # 检查API密钥
+        if not api_key:
+            logger.error("TOPPROXY_KEY 未设置，无法调用上游API")
+            raise ValueError("TOPPROXY_KEY 未配置，请联系管理员设置上游API密钥")
+        
         url = f"{cls.BASE_URL}/giahanproxy.php"
         params = {
-            "key": cls.API_KEY,
+            "key": api_key,
             "loaiproxy": provider,
             "idproxy": proxy_id,
             "ngay": days
         }
         
-        return await cls._make_request("GET", url, params=params)
+        logger.info(f"调用上游API续费代理: {url}")
+        logger.info(f"参数: {params}")
+        
+        try:
+            result = await cls._make_request("GET", url, params=params)
+            logger.info(f"上游API响应: {result}")
+            return result
+        except Exception as e:
+            logger.error(f"上游API调用失败: {e}")
+            raise
     
     @classmethod
     async def list_proxies(cls, provider: str, proxy_id: Optional[str] = None) -> Dict[str, Any]:
@@ -164,26 +285,50 @@ class StaticProxyService(UpstreamAPIService):
         Returns:
             API响应结果
         """
+        # 动态获取API密钥
+        api_key = cls.get_api_key()
+        
+        # 检查API密钥
+        if not api_key:
+            logger.error("TOPPROXY_KEY 未设置，无法调用上游API")
+            raise ValueError("TOPPROXY_KEY 未配置，请联系管理员设置上游API密钥")
+        
         url = f"{cls.BASE_URL}/listproxy.php"
         params = {
-            "key": cls.API_KEY,
+            "key": api_key,
             "loaiproxy": provider,
             "idproxy": proxy_id or "all"
         }
         
-        return await cls._make_request("GET", url, params=params)
+        logger.info(f"调用上游API获取代理列表: {url}")
+        logger.info(f"参数: {params}")
+        
+        try:
+            result = await cls._make_request("GET", url, params=params)
+            logger.info(f"上游API响应: {result}")
+            return result
+        except Exception as e:
+            logger.error(f"上游API调用失败: {e}")
+            raise
     
     @classmethod
-    def check_status(cls, response: Dict[str, Any]) -> tuple[bool, str]:
+    def check_status(cls, response) -> tuple[bool, str]:
         """
         检查API响应状态
         
         Args:
-            response: API响应
+            response: API响应（可能是字典或列表）
         
         Returns:
             (是否成功, 状态消息)
         """
+        # 如果响应是列表，取第一个元素
+        if isinstance(response, list):
+            if len(response) > 0:
+                response = response[0]
+            else:
+                return False, "响应为空"
+        
         status = response.get("status")
         
         if status == 100:
@@ -226,7 +371,16 @@ class DynamicProxyService(UpstreamAPIService):
             "soluong": quantity
         }
         
-        return await cls._make_request("GET", url, params=params)
+        logger.info(f"购买动态代理密钥: {url}")
+        logger.info(f"参数: {params}")
+        
+        try:
+            result = await cls._make_request("GET", url, params=params)
+            logger.info(f"购买动态代理响应: {result}")
+            return result
+        except Exception as e:
+            logger.error(f"购买动态代理失败: {e}")
+            raise
     
     @classmethod
     async def get_rotation_proxy(cls, key: str, carrier: str = "random", 

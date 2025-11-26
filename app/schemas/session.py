@@ -39,6 +39,7 @@ class SessionEnvelope(BaseModel):
 
     token: str
     token_type: str
+    api_key: Optional[str] = None
     user: SessionUser
     abilities: Dict[str, bool]
     pages: Dict[str, SessionPageState]

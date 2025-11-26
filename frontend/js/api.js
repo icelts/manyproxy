@@ -1,11 +1,12 @@
 // API配置和调用模块
-const storage = window.secureStorage || window.sessionStorage;
+const storage = window.secureStorage || window.localStorage || window.sessionStorage;
 
 class API {
     constructor() {
         this.baseURL = config.getBaseURL();
         this.token = storage.getItem(config.getStorageKey('tokenKey'));
-        this.apiKey = storage.getItem(config.getStorageKey('apiKeyKey'));
+        const storedApiKey = storage.getItem(config.getStorageKey('apiKeyKey'));
+        this.apiKey = storedApiKey || null;
     }
 
     // 设置认证令牌
@@ -16,8 +17,13 @@ class API {
 
     // 设置API密钥
     setApiKey(apiKey) {
-        this.apiKey = apiKey;
-        storage.setItem(config.getStorageKey('apiKeyKey'), apiKey);
+        if (apiKey) {
+            this.apiKey = apiKey;
+            storage.setItem(config.getStorageKey('apiKeyKey'), apiKey);
+        } else {
+            this.apiKey = null;
+            storage.removeItem(config.getStorageKey('apiKeyKey'));
+        }
     }
 
     // 清除认证信息
@@ -27,6 +33,20 @@ class API {
         storage.removeItem(config.getStorageKey('tokenKey'));
         storage.removeItem(config.getStorageKey('apiKeyKey'));
         storage.removeItem(config.getStorageKey('userKey'));
+    }
+
+    hasApiKey() {
+        return !!this.apiKey;
+    }
+
+    ensureApiKey() {
+        if (!this.apiKey) {
+            const error = new Error('需要 API Key 才能调用代理接口，请先在个人资料页创建。');
+            error.code = 'API_KEY_REQUIRED';
+            error.status = 401;
+            throw error;
+        }
+        return this.apiKey;
     }
 
     // 通用请求方法
@@ -40,10 +60,19 @@ class API {
             ...options
         };
 
-        // 添加认证头
+        const requiresApiKey = endpoint.startsWith('/proxy');
+        const isSessionStateEndpoint = endpoint.startsWith('/session/state');
+        if (requiresApiKey && !this.apiKey) {
+            const apiKeyError = new Error('需要 API Key 才能调用代理接口，请先在个人资料页创建。');
+            apiKeyError.code = 'API_KEY_REQUIRED';
+            apiKeyError.status = 401;
+            throw apiKeyError;
+        }
+
         if (this.token) {
             requestConfig.headers.Authorization = `Bearer ${this.token}`;
-        } else if (this.apiKey) {
+        }
+        if (this.apiKey) {
             requestConfig.headers['X-API-Key'] = this.apiKey;
         }
 
@@ -56,11 +85,15 @@ class API {
                 apiError.status = response.status;
                 apiError.response = data;
                 
-                // 如果是401错误，清除本地认证信息
-                if (response.status === 401) {
-                    console.log('收到401错误，准备刷新会话');
-                    if (window.sessionController) {
-                        await window.sessionController.safeRefresh();
+                if (response.status === 401 && !requiresApiKey && !isSessionStateEndpoint) {
+                    console.log('检测到401错误，尝试刷新token');
+                    if (window.sessionController && !window.sessionController.isRefreshing) {
+                        window.sessionController.isRefreshing = true;
+                        try {
+                            await window.sessionController.safeRefresh();
+                        } finally {
+                            window.sessionController.isRefreshing = false;
+                        }
                     }
                 }
                 

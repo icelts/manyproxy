@@ -34,11 +34,14 @@ class ProxyService:
     async def get_products(db: AsyncSession, category: Optional[str] = None) -> List[ProxyProduct]:
         """获取产品列表"""
         query = select(ProxyProduct).where(ProxyProduct.is_active == True)
+        
         if category:
             query = query.where(ProxyProduct.category == category)
         
         result = await db.execute(query)
-        return result.scalars().all()
+        products = result.scalars().all()
+        
+        return products
 
     @staticmethod
     async def _prepare_purchase(
@@ -47,7 +50,6 @@ class ProxyService:
         product_id: Optional[int],
         category: str,
         quantity: int,
-        duration_days: Optional[int] = None,
     ) -> Tuple[ProxyProduct, User, Decimal, int]:
         """校验商品/用户并计算金额"""
         if not product_id:
@@ -71,12 +73,14 @@ class ProxyService:
         if not user.is_active:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User is inactive")
 
-        base_duration = product.duration_days or 30
-        actual_duration = duration_days or base_duration
+        actual_duration = product.duration_days or 0
         if actual_duration < 1:
-            actual_duration = base_duration or 30
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Product duration is not configured"
+            )
 
-        total_price = ProxyService._calculate_total_price(product, quantity, actual_duration, base_duration)
+        total_price = ProxyService._calculate_total_price(product, quantity)
         current_balance = Decimal(user.balance or 0)
         if current_balance < total_price:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Insufficient balance")
@@ -121,15 +125,10 @@ class ProxyService:
     def _calculate_total_price(
         product: ProxyProduct,
         quantity: int,
-        duration_days: int,
-        base_duration: int,
     ) -> Decimal:
-        price = Decimal(product.price or 0)
         qty = Decimal(quantity)
-        duration = Decimal(duration_days)
-        baseline = Decimal(base_duration or 1)
-        duration_multiplier = duration / baseline if baseline else Decimal(1)
-        raw_total = price * qty * duration_multiplier
+        unit_price = Decimal(product.price or 0)
+        raw_total = unit_price * qty
         return ProxyService._quantize(raw_total)
 
     @staticmethod
@@ -225,18 +224,26 @@ class ProxyService:
             product_id=purchase_data.product_id,
             category="static",
             quantity=purchase_data.quantity,
-            duration_days=purchase_data.duration_days,
         )
 
-        if purchase_data.provider and purchase_data.provider != product.provider:
+        allow_any_provider = (product.provider or "").lower() in {"generic", "all", "*"}
+        selected_provider = purchase_data.provider or product.provider
+        if purchase_data.provider and not allow_any_provider and purchase_data.provider != product.provider:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Product provider mismatch"
             )
+        if allow_any_provider and not purchase_data.provider:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Provider must be specified for this product"
+            )
+
+        # 不再限制固定时长，使用产品设置的时长
 
         try:
             upstream_result = await StaticProxyService.buy_proxy(
-                provider=product.provider,
+                provider=selected_provider,
                 quantity=purchase_data.quantity,
                 days=actual_duration,
                 protocol=purchase_data.protocol,
@@ -260,6 +267,14 @@ class ProxyService:
         order_id = f"STATIC_{uuid.uuid4().hex[:12].upper()}"
         expires_at = datetime.utcnow() + timedelta(days=actual_duration)
         
+        # 处理上游API响应（可能是列表或字典）
+        if isinstance(upstream_result, list) and len(upstream_result) > 0:
+            proxy_data = upstream_result[0]  # 取第一个元素作为代理数据
+            upstream_id = str(proxy_data.get("idproxy"))
+        else:
+            proxy_data = upstream_result
+            upstream_id = str(upstream_result.get("idproxy")) if upstream_result else None
+        
         return await ProxyService._finalize_purchase(
             db,
             user=user,
@@ -267,8 +282,8 @@ class ProxyService:
             quantity=purchase_data.quantity,
             total_price=total_price,
             order_identifier=order_id,
-            proxy_info=upstream_result,
-            upstream_id=str(upstream_result.get("idproxy")),
+            proxy_info=proxy_data,
+            upstream_id=upstream_id,
             expires_at=expires_at
         )
 
@@ -282,7 +297,6 @@ class ProxyService:
             product_id=purchase_data.product_id,
             category="dynamic",
             quantity=purchase_data.quantity,
-            duration_days=purchase_data.duration_days,
         )
 
         try:
@@ -335,7 +349,6 @@ class ProxyService:
             product_id=purchase_data.product_id,
             category="mobile",
             quantity=purchase_data.quantity,
-            duration_days=None,
         )
 
         try:
@@ -415,9 +428,6 @@ class ProxyService:
             page=page,
             size=size
         )
-    
-    @staticmethod
-    async def get_dynamic_proxy(db: AsyncSession, user_id: int, 
     @staticmethod
     async def get_dynamic_proxy(db: AsyncSession, user_id: int,
                               order_id: Optional[str] = None, carrier: str = "random",
@@ -518,7 +528,14 @@ class ProxyService:
         for order in orders:
             if order.order_id.startswith("STATIC_"):
                 by_category["static"] += 1
-                provider = (order.proxy_info or {}).get("loaiproxy", "unknown")
+                # 尝试从多个可能的字段获取provider信息
+                proxy_info = order.proxy_info or {}
+                provider = (
+                    proxy_info.get("loaiproxy") or 
+                    proxy_info.get("provider") or 
+                    proxy_info.get("type") or 
+                    "unknown"
+                )
                 by_provider[provider] = by_provider.get(provider, 0) + 1
             elif order.order_id.startswith("DYNAMIC_"):
                 by_category["dynamic"] += 1
@@ -574,12 +591,24 @@ class ProxyService:
                 detail="Proxy order not found or inactive"
             )
         
-        # 获取当前代理类型
-        current_provider = proxy_order.proxy_info.get("loaiproxy")
+        # 获取产品信息来确定当前代理类型
+        product_result = await db.execute(
+            select(ProxyProduct).where(ProxyProduct.id == proxy_order.product_id)
+        )
+        product = product_result.scalar_one_or_none()
+        
+        if not product:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Product not found"
+            )
+        
+        # 从产品信息获取当前代理类型
+        current_provider = product.provider
         if not current_provider:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Cannot determine current proxy type"
+                detail="Cannot determine current proxy type from product"
             )
         
         # 调用上游API更换代理
@@ -634,12 +663,24 @@ class ProxyService:
                 detail="Proxy order not found or inactive"
             )
         
-        # 获取代理类型
-        provider = proxy_order.proxy_info.get("loaiproxy")
+        # 获取产品信息来确定代理类型
+        product_result = await db.execute(
+            select(ProxyProduct).where(ProxyProduct.id == proxy_order.product_id)
+        )
+        product = product_result.scalar_one_or_none()
+        
+        if not product:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Product not found"
+            )
+        
+        # 从产品信息获取代理类型
+        provider = product.provider
         if not provider:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Cannot determine proxy type"
+                detail="Cannot determine proxy type from product"
             )
         
         # 调用上游API更改安全信息
@@ -691,19 +732,45 @@ class ProxyService:
                 detail="Proxy order not found or inactive"
             )
         
-        # 获取代理类型
-        provider = proxy_order.proxy_info.get("loaiproxy")
+        # 获取产品信息来确定代理类型
+        product_result = await db.execute(
+            select(ProxyProduct).where(ProxyProduct.id == proxy_order.product_id)
+        )
+        product = product_result.scalar_one_or_none()
+        
+        if not product:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Product not found"
+            )
+        
+        # 从产品信息获取代理类型
+        provider = product.provider
         if not provider:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Cannot determine proxy type"
+                detail="Cannot determine proxy type from product"
             )
         
         # 调用上游API续费
         try:
+            # 处理upstream_id，确保它是整数
+            proxy_id = proxy_order.upstream_id
+            if isinstance(proxy_id, str):
+                # 如果是字符串，尝试提取数字部分
+                import re
+                numbers = re.findall(r'\d+', proxy_id)
+                if numbers:
+                    proxy_id = int(numbers[0])
+                else:
+                    # 如果没有数字，使用默认值1
+                    proxy_id = 1
+            else:
+                proxy_id = int(proxy_id)
+            
             upstream_result = await StaticProxyService.renew_proxy(
                 provider=provider,
-                proxy_id=int(proxy_order.upstream_id),
+                proxy_id=proxy_id,
                 days=days
             )
         except Exception as e:
@@ -721,15 +788,219 @@ class ProxyService:
                 detail=f"Upstream API error: {message}"
             )
         
-        # 更新到期时间
+        # 更新到期时间，但保留原有的完整代理信息
         new_time = upstream_result.get("time")
         if new_time:
             proxy_order.expires_at = datetime.fromtimestamp(new_time)
         
-        proxy_order.proxy_info = upstream_result
+        # 保留原有的完整代理信息，只更新状态相关字段
+        if proxy_order.proxy_info and isinstance(proxy_order.proxy_info, dict):
+            # 只更新状态和时间相关字段，保留连接信息
+            proxy_order.proxy_info.update({
+                "status": upstream_result.get("status", proxy_order.proxy_info.get("status")),
+                "time": upstream_result.get("time", proxy_order.proxy_info.get("time"))
+            })
+        else:
+            # 如果没有原有信息，则使用续费响应
+            proxy_order.proxy_info = upstream_result
+        
         await db.commit()
         
         return upstream_result
+
+    @staticmethod
+    async def renew_static_proxy_auto(db: AsyncSession, user_id: int, order_id: str) -> Dict[str, Any]:
+        """自动续费静态代理（按原套餐时长）"""
+        # 获取订单信息
+        result = await db.execute(
+            select(ProxyOrder).where(
+                ProxyOrder.user_id == user_id,
+                ProxyOrder.order_id == order_id,
+                ProxyOrder.status == "active"
+            )
+        )
+        proxy_order = result.scalar_one_or_none()
+        
+        if not proxy_order:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Proxy order not found or inactive"
+            )
+        
+        # 获取产品信息来确定代理类型和原套餐时长
+        product_result = await db.execute(
+            select(ProxyProduct).where(ProxyProduct.id == proxy_order.product_id)
+        )
+        product = product_result.scalar_one_or_none()
+        
+        if not product:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Product not found"
+            )
+        
+        # 获取原套餐时长
+        duration_days = product.duration_days
+        if not duration_days or duration_days < 1:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Product duration is not configured"
+            )
+        
+        # 计算续费费用
+        total_price = ProxyService._calculate_total_price(product, 1)
+        
+        # 检查用户余额
+        user_result = await db.execute(select(User).where(User.id == user_id))
+        user = user_result.scalar_one_or_none()
+        if not user:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+        
+        current_balance = Decimal(user.balance or 0)
+        if current_balance < total_price:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Insufficient balance")
+        
+        # 扣除余额
+        balance_before = current_balance
+        new_balance = ProxyService._quantize(balance_before - total_price)
+        user.balance = new_balance
+        
+        # 创建交易记录
+        now = datetime.utcnow()
+        description = f"Renew {product.product_name} for {duration_days} days"
+        
+        order = Order(
+            order_number=await OrderService.generate_order_number(),
+            user_id=user.id,
+            type=OrderType.PURCHASE,
+            amount=total_price,
+            status=OrderStatus.COMPLETED,
+            description=description,
+            paid_at=now,
+            completed_at=now,
+        )
+        db.add(order)
+        await db.flush()
+
+        transaction = Transaction(
+            transaction_id=await OrderService.generate_transaction_id(),
+            order_id=order.id,
+            user_id=user.id,
+            type="renewal",
+            amount=total_price,
+            balance_before=balance_before,
+            balance_after=new_balance,
+            description=description,
+        )
+        db.add(transaction)
+
+        balance_log = BalanceLog(
+            user_id=user.id,
+            type="renewal",
+            amount=total_price,
+            balance_before=balance_before,
+            balance_after=new_balance,
+            description=description,
+            related_order_id=order.id,
+        )
+        db.add(balance_log)
+        
+        # 调用原有的续费方法
+        upstream_result = await ProxyService.renew_static_proxy(db, user_id, order_id, duration_days)
+        
+        return {
+            "upstream_result": upstream_result,
+            "renewal_info": {
+                "duration_days": duration_days,
+                "amount": total_price,
+                "new_balance": new_balance,
+                "description": description
+            }
+        }
+
+    @staticmethod
+    async def export_static_proxies(db: AsyncSession, user_id: int) -> Dict[str, Any]:
+        """导出所有静态代理为txt格式"""
+        # 获取用户的所有静态代理
+        result = await db.execute(
+            select(ProxyOrder).where(
+                ProxyOrder.user_id == user_id,
+                ProxyOrder.order_id.like("STATIC_%"),
+                ProxyOrder.status == "active"
+            )
+        )
+        static_proxies = result.scalars().all()
+        
+        if not static_proxies:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No active static proxies found"
+            )
+        
+        # 格式化为txt格式
+        proxy_lines = []
+        for proxy_order in static_proxies:
+            info = proxy_order.proxy_info or {}
+            auth_info = info.get("auth", {})
+            
+            ip = info.get("ip") or info.get("proxy") or info.get("proxyhttp") or info.get("proxy_http")
+            port = info.get("port") or info.get("port_proxy") or info.get("porthttp") or info.get("port_http")
+            username = info.get("user") or info.get("username") or auth_info.get("user")
+            password = info.get("password") or info.get("pass") or auth_info.get("pass")
+            
+            if ip and port and username and password:
+                proxy_lines.append(f"{ip}:{port}:{username}:{password}")
+        
+        if not proxy_lines:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No valid proxy information found"
+            )
+        
+        return {
+            "format": "txt",
+            "content": "\n".join(proxy_lines),
+            "count": len(proxy_lines),
+            "filename": f"static_proxies_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+        }
+
+    @staticmethod
+    async def export_dynamic_proxies(db: AsyncSession, user_id: int) -> Dict[str, Any]:
+        """导出所有动态代理的key"""
+        # 获取用户的所有动态代理
+        result = await db.execute(
+            select(ProxyOrder).where(
+                ProxyOrder.user_id == user_id,
+                ProxyOrder.order_id.like("DYNAMIC_%"),
+                ProxyOrder.status == "active"
+            )
+        )
+        dynamic_proxies = result.scalars().all()
+        
+        if not dynamic_proxies:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No active dynamic proxies found"
+            )
+        
+        # 提取所有key
+        keys = []
+        for proxy_order in dynamic_proxies:
+            if proxy_order.upstream_id:
+                keys.append(proxy_order.upstream_id)
+        
+        if not keys:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No valid dynamic proxy keys found"
+            )
+        
+        return {
+            "format": "txt",
+            "content": "\n".join(keys),
+            "count": len(keys),
+            "filename": f"dynamic_keys_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+        }
     
     @staticmethod
     async def get_upstream_proxy_list(db: AsyncSession, user_id: int, provider: str, 

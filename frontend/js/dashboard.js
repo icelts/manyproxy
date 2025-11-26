@@ -2,6 +2,7 @@
 class DashboardManager {
     constructor() {
         this.chart = null;
+        this.apiKeyWarningShown = false;
         this.initChart();
     }
 
@@ -59,23 +60,51 @@ class DashboardManager {
 
     async loadProxyStats() {
         try {
+            if (!api.hasApiKey()) {
+                this.setProxyStatsUnavailable();
+                this.showApiKeyWarning();
+                return;
+            }
             const stats = await api.getProxyStats();
             document.getElementById('total-proxies').textContent = stats.total_proxies || 0;
             document.getElementById('active-proxies').textContent = stats.active_proxies || 0;
 
             if (this.chart) {
                 this.chart.data.labels = this.getProxyLabels();
+                // 使用后端返回的by_category字段，或者兼容旧的字段名
+                const categoryData = stats.by_category || {};
                 this.chart.data.datasets[0].data = [
-                    stats.static_proxies || 0,
-                    stats.dynamic_proxies || 0,
-                    stats.mobile_proxies || 0
+                    categoryData.static || stats.static_proxies || 0,
+                    categoryData.dynamic || stats.dynamic_proxies || 0,
+                    categoryData.mobile || stats.mobile_proxies || 0
                 ];
                 this.chart.update();
             }
         } catch (error) {
             console.error('加载代理统计失败:', error);
+            if (error?.code === 'API_KEY_REQUIRED') {
+                this.setProxyStatsUnavailable();
+                this.showApiKeyWarning();
+                return;
+            }
             document.getElementById('total-proxies').textContent = '0';
             document.getElementById('active-proxies').textContent = '0';
+        }
+    }
+
+    setProxyStatsUnavailable() {
+        document.getElementById('total-proxies').textContent = '--';
+        document.getElementById('active-proxies').textContent = '--';
+    }
+
+    showApiKeyWarning() {
+        if (this.apiKeyWarningShown) return;
+        this.apiKeyWarningShown = true;
+        const message = i18n?.t('common.apiKeyRequired') || 'Please create an API key before using proxy APIs.';
+        if (window.app?.showToast) {
+            window.app.showToast(message, 'warning');
+        } else {
+            alert(message);
         }
     }
 

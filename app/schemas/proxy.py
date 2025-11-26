@@ -10,7 +10,7 @@ class ProxyProductBase(BaseModel):
     product_name: str
     description: Optional[str] = None
     price: float
-    duration_days: int = 30
+    duration_days: int  # 管理员设置的固定时长
     stock: int = 0
 
 
@@ -22,6 +22,7 @@ class ProxyProductUpdate(BaseModel):
     product_name: Optional[str] = None
     description: Optional[str] = None
     price: Optional[float] = None
+    duration_days: Optional[int] = None
     stock: Optional[int] = None
     is_active: Optional[bool] = None
 
@@ -49,12 +50,10 @@ class ProxyOrderCreate(ProxyOrderBase):
 
 class StaticProxyPurchase(ProxyOrderCreate):
     provider: str  # Viettel, FPT, VNPT, US, DatacenterA, etc.
-    duration_days: int = 30
 
 
 class DynamicProxyPurchase(BaseModel):
     product_id: int
-    duration_days: int = 30
     quantity: int = 1
 
 

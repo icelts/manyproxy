@@ -8,6 +8,10 @@ class NavbarManager {
         await sessionController.initialized;
 
         if (!sessionController.isAuthenticated()) {
+            await sessionController.safeRefresh();
+        }
+
+        if (!sessionController.isAuthenticated()) {
             if (!window.location.pathname.includes('login.html') &&
                 !window.location.pathname.includes('register.html')) {
                 window.location.href = 'login.html';

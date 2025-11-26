@@ -148,6 +148,9 @@
             try {
                 await sessionController.initialized;
                 if (!sessionController.isAuthenticated()) {
+                    await sessionController.safeRefresh();
+                }
+                if (!sessionController.isAuthenticated()) {
                     window.location.href = 'login.html';
                     return;
                 }

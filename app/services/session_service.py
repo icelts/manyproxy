@@ -103,7 +103,11 @@ class SessionService:
         return await SessionService.get_user_by_username(db, username)
 
     @staticmethod
-    def build_session_envelope(user: User, existing_token: Optional[str] = None) -> SessionEnvelope:
+    async def build_session_envelope(
+        user: User, 
+        existing_token: Optional[str] = None, 
+        db: AsyncSession = None
+    ) -> SessionEnvelope:
         """构建统一的会话响应。"""
         token_payload = {"sub": user.username}
         if user.is_admin:
@@ -122,9 +126,23 @@ class SessionService:
         pages = SessionService._build_page_states(user)
         abilities = SessionService._build_abilities(user)
 
+        # 获取用户的第一个有效API Key
+        api_key = None
+        if db is not None:
+            result = await db.execute(
+                select(APIKey).where(
+                    APIKey.user_id == user.id, 
+                    APIKey.is_active == True
+                ).limit(1)
+            )
+            api_key_obj = result.scalar_one_or_none()
+            if api_key_obj:
+                api_key = api_key_obj.api_key
+
         return SessionEnvelope(
             token=token,
             token_type="bearer",
+            api_key=api_key,
             user=session_user,
             abilities=abilities,
             pages=pages,
