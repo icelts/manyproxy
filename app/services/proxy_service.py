@@ -321,6 +321,44 @@ class ProxyService:
         order_id = f"DYNAMIC_{uuid.uuid4().hex[:12].upper()}"
         expires_at = datetime.utcnow() + timedelta(days=actual_duration)
         
+        # 处理动态代理密钥获取
+        upstream_id = upstream_result.get("keyxoay")
+        
+        # 如果没有keyxoay字段，尝试其他方式获取密钥
+        if not upstream_id:
+            logger.warning("响应中没有keyxoay字段，尝试获取密钥信息")
+            
+            # 方法1: 检查是否有其他可能的密钥字段
+            possible_key_fields = ["key", "token", "access_key", "api_key", "rotation_key"]
+            for field in possible_key_fields:
+                if field in upstream_result:
+                    upstream_id = upstream_result[field]
+                    logger.info(f"从字段 {field} 获取到密钥: {upstream_id}")
+                    break
+            
+            # 方法2: 如果仍然没有密钥，尝试调用获取密钥列表API
+            if not upstream_id:
+                try:
+                    logger.info("尝试从上游API获取密钥列表")
+                    keys_response = await DynamicProxyService.get_rotation_keys()
+                    
+                    if keys_response.get("status") == 100:
+                        # 查找最新的密钥
+                        keys_data = keys_response.get("data", [])
+                        if keys_data:
+                            # 取第一个或最新的密钥
+                            latest_key = keys_data[0] if isinstance(keys_data, list) else keys_data
+                            upstream_id = latest_key.get("keyxoay") or latest_key.get("key")
+                            logger.info(f"从密钥列表获取到密钥: {upstream_id}")
+                    
+                except Exception as e:
+                    logger.error(f"获取密钥列表失败: {e}")
+            
+            # 方法3: 如果还是没有，使用订单ID作为临时标识
+            if not upstream_id:
+                upstream_id = order_id
+                logger.warning(f"无法获取密钥，使用订单ID作为临时标识: {upstream_id}")
+        
         return await ProxyService._finalize_purchase(
             db,
             user=user,
@@ -329,7 +367,7 @@ class ProxyService:
             total_price=total_price,
             order_identifier=order_id,
             proxy_info=upstream_result,
-            upstream_id=upstream_result.get("keyxoay"),
+            upstream_id=upstream_id,
             expires_at=expires_at
         )
 

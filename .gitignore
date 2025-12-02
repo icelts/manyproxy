@@ -79,6 +79,8 @@ secrets.json
 # Alembic
 alembic/versions/*.py
 !alembic/versions/__init__.py
+!alembic/versions/003_current_state.py
+!alembic/versions/004_bootstrap_core_tables.py
 
 # Coverage reports
 htmlcov/

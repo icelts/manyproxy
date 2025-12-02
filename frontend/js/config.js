@@ -88,8 +88,13 @@
 
     class Config {
         constructor() {
+            const origin =
+                window.location.origin && window.location.origin !== "null"
+                    ? window.location.origin
+                    : "";
+
             this.api = {
-                baseURL: "http://localhost:8000/api/v1",
+                baseURL: origin ? `${origin}/api/v1` : "/api/v1",
                 timeout: 30000,
                 retryCount: 3,
             };

@@ -1,14 +1,17 @@
 from __future__ import annotations
 
+import logging
 import time
 from datetime import datetime
 from typing import Dict, Optional
 
 from fastapi import HTTPException, status
+from sqlalchemy.exc import OperationalError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
 from app.core.config import settings
+from app.core.database import AsyncSessionLocal
 from app.core.security import (
     create_access_token,
     get_password_hash,
@@ -19,6 +22,8 @@ from app.models.user import APIKey, User
 from app.schemas.session import SessionEnvelope, SessionPageState, SessionUser
 from app.schemas.user import APIKeyCreate, UserCreate
 from app.utils.cache import CacheService
+
+logger = logging.getLogger(__name__)
 
 
 class SessionService:
@@ -126,18 +131,8 @@ class SessionService:
         pages = SessionService._build_page_states(user)
         abilities = SessionService._build_abilities(user)
 
-        # 获取用户的第一个有效API Key
-        api_key = None
-        if db is not None:
-            result = await db.execute(
-                select(APIKey).where(
-                    APIKey.user_id == user.id, 
-                    APIKey.is_active == True
-                ).limit(1)
-            )
-            api_key_obj = result.scalar_one_or_none()
-            if api_key_obj:
-                api_key = api_key_obj.api_key
+        # Fetch the user's first active API key and fall back gracefully when loading fails
+        api_key = await SessionService._fetch_primary_api_key(db, user.id) if db is not None else None
 
         return SessionEnvelope(
             token=token,
@@ -163,6 +158,56 @@ class SessionService:
             reason = None if allowed else meta.get("reason")
             states[page] = SessionPageState(allowed=allowed, reason=reason)
         return states
+
+    @staticmethod
+    async def _fetch_primary_api_key(db: AsyncSession, user_id: int) -> Optional[str]:
+        """Return the user's primary active API key, retrying once if the DB connection drops."""
+        if db is None:
+            return None
+
+        stmt = (
+            select(APIKey)
+            .where(APIKey.user_id == user_id, APIKey.is_active == True)
+            .order_by(APIKey.created_at.asc())
+            .limit(1)
+        )
+
+        try:
+            result = await db.execute(stmt)
+            api_key_obj = result.scalar_one_or_none()
+            return api_key_obj.api_key if api_key_obj else None
+        except OperationalError as exc:
+            logger.warning(
+                "Primary API key query failed for user_id=%s, retrying with fresh session: %s",
+                user_id,
+                exc,
+            )
+            try:
+                await db.rollback()
+            except Exception as rollback_error:
+                logger.debug("Rollback after API key query failure failed: %s", rollback_error)
+
+            try:
+                async with AsyncSessionLocal() as retry_db:
+                    retry_result = await retry_db.execute(stmt)
+                    retry_key = retry_result.scalar_one_or_none()
+                    return retry_key.api_key if retry_key else None
+            except SQLAlchemyError as retry_exc:
+                logger.error(
+                    "Retrying API key query failed for user_id=%s: %s",
+                    user_id,
+                    retry_exc,
+                )
+                return None
+        except SQLAlchemyError as exc:
+            logger.error("Primary API key query failed for user_id=%s: %s", user_id, exc)
+            try:
+                await db.rollback()
+            except Exception as rollback_error:
+                logger.debug("Rollback after API key query failure failed: %s", rollback_error)
+            return None
+
+        return None
 
     @staticmethod
     def _build_abilities(user: User) -> Dict[str, bool]:

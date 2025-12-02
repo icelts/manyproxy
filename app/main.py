@@ -254,8 +254,15 @@ async def health_check():
 
 @app.get("/")
 async def root():
-    """Root endpoint."""
-    return {"message": "Proxy Platform API", "version": settings.VERSION}
+    """Root endpoint - returns the homepage."""
+    from fastapi.responses import FileResponse
+    import os
+    
+    homepage_path = "frontend/index.html"
+    if os.path.exists(homepage_path):
+        return FileResponse(homepage_path)
+    else:
+        return {"message": "Proxy Platform API", "version": settings.VERSION}
 
 
 # Static files
@@ -264,6 +271,7 @@ if os.path.exists("frontend"):
     app.mount("/css", StaticFiles(directory="frontend/css"), name="css")
     app.mount("/js", StaticFiles(directory="frontend/js"), name="js")
     app.mount("/pages", StaticFiles(directory="frontend/pages"), name="pages")
+    app.mount("/components", StaticFiles(directory="frontend/components"), name="components")
 
 # Include API routes
 app.include_router(api_router)
