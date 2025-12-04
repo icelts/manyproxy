@@ -29,7 +29,7 @@ def get_current_api_user(request: Request) -> int:
     return getattr(user, "id", None) or getattr(request.state, "user_id", None)
 
 
-@router.get("/products", response_model=list[ProxyProductResponse])
+@router.get("/products", response_model=list[ProxyProductResponse], include_in_schema=False)
 async def get_products(
     category: Optional[str] = Query(None, description="产品类别"),
     db: AsyncSession = Depends(get_db),
@@ -40,7 +40,7 @@ async def get_products(
     return [ProxyProductResponse.from_orm(product) for product in products]
 
 
-@router.post("/static/buy", response_model=ProxyOrderResponse)
+@router.post("/static/buy", response_model=ProxyOrderResponse, include_in_schema=False)
 async def buy_static_proxy(
     purchase_data: StaticProxyPurchase,
     db: AsyncSession = Depends(get_db),
@@ -50,7 +50,7 @@ async def buy_static_proxy(
     return await ProxyService.buy_static_proxy(db, user_id, purchase_data)
 
 
-@router.post("/dynamic/buy", response_model=ProxyOrderResponse)
+@router.post("/dynamic/buy", response_model=ProxyOrderResponse, include_in_schema=False)
 async def buy_dynamic_proxy(
     purchase_data: DynamicProxyPurchase,
     db: AsyncSession = Depends(get_db),
@@ -60,7 +60,7 @@ async def buy_dynamic_proxy(
     return await ProxyService.buy_dynamic_proxy(db, user_id, purchase_data)
 
 
-@router.post("/mobile/buy", response_model=ProxyOrderResponse)
+@router.post("/mobile/buy", response_model=ProxyOrderResponse, include_in_schema=False)
 async def buy_mobile_proxy(
     purchase_data: MobileProxyPurchase,
     db: AsyncSession = Depends(get_db),
@@ -70,7 +70,7 @@ async def buy_mobile_proxy(
     return await ProxyService.buy_mobile_proxy(db, user_id, purchase_data)
 
 
-@router.get("/list", response_model=ProxyListResponse)
+@router.get("/list", response_model=ProxyListResponse, include_in_schema=False)
 async def get_proxy_list(
     category: Optional[str] = Query(None, description="代理类别"),
     page: int = Query(1, ge=1, description="页码"),
@@ -146,7 +146,7 @@ async def reset_mobile_proxy_by_token(
     )
 
 
-@router.get("/stats", response_model=ProxyStatsResponse)
+@router.get("/stats", response_model=ProxyStatsResponse, include_in_schema=False)
 async def get_proxy_stats(db: AsyncSession = Depends(get_db),
     user_id: int = Depends(get_current_api_user)):
     """获取代理统计信息"""
@@ -183,7 +183,7 @@ async def change_proxy_security(
     )
 
 
-@router.post("/static/{order_id}/renew")
+@router.post("/static/{order_id}/renew", include_in_schema=False)
 async def renew_static_proxy(
     order_id: str,
     db: AsyncSession = Depends(get_db),
@@ -192,7 +192,7 @@ async def renew_static_proxy(
     return await ProxyService.renew_static_proxy_auto(db, user_id, order_id)
 
 
-@router.get("/static/export")
+@router.get("/static/export", include_in_schema=False)
 async def export_static_proxies(
     db: AsyncSession = Depends(get_db),
     user_id: int = Depends(get_current_api_user)):
@@ -200,7 +200,7 @@ async def export_static_proxies(
     return await ProxyService.export_static_proxies(db, user_id)
 
 
-@router.get("/dynamic/export")
+@router.get("/dynamic/export", include_in_schema=False)
 async def export_dynamic_proxies(
     db: AsyncSession = Depends(get_db),
     user_id: int = Depends(get_current_api_user)):
@@ -208,7 +208,7 @@ async def export_dynamic_proxies(
     return await ProxyService.export_dynamic_proxies(db, user_id)
 
 
-@router.get("/static/upstream-list")
+@router.get("/static/upstream-list", include_in_schema=False)
 async def get_upstream_proxy_list(
     provider: str = Query(..., description="代理类型"),
     proxy_id: Optional[str] = Query(None, description="代理ID，为all获取所有"),
@@ -218,7 +218,7 @@ async def get_upstream_proxy_list(
     return await ProxyService.get_upstream_proxy_list(db, user_id, provider, proxy_id)
 
 
-@router.get("/static/providers")
+@router.get("/static/providers", include_in_schema=False)
 async def get_supported_providers():
     """获取支持的静态代理类型"""
     return {

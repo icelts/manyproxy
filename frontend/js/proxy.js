@@ -43,8 +43,18 @@ class ProxyManager {
     }
 
     groupProxies(orders) {
+        const now = Date.now();
         this.proxies = { static: [], dynamic: [], mobile: [] };
         orders.forEach((order) => {
+            if (order?.status && order.status !== 'active') {
+                return;
+            }
+            if (order?.expires_at) {
+                const expiresAt = new Date(order.expires_at).getTime();
+                if (!Number.isNaN(expiresAt) && expiresAt <= now) {
+                    return;
+                }
+            }
             if (order.order_id?.startsWith('STATIC_')) {
                 this.proxies.static.push(order);
             } else if (order.order_id?.startsWith('DYNAMIC_')) {

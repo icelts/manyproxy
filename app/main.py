@@ -14,6 +14,7 @@ from pathlib import Path
 from app.core.config import settings
 from app.core.database import AsyncSessionLocal, engine
 from app.api.v1.api import api_router
+from app.api.v1.public_api import public_router
 from app.services.session_service import SessionService
 from app.services.proxy_service import ProxyService
 from app.utils.cache import RateLimiter, init_redis
@@ -73,11 +74,35 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title=settings.APP_NAME,
     version=settings.VERSION,
-    description="Proxy Platform API: static, dynamic and mobile proxies.",
+    description="Proxy Platform API: IP更换接口服务",
     openapi_url="/api/v1/openapi.json" if settings.DEBUG else None,
     docs_url="/api/v1/docs" if settings.DEBUG else None,
     redoc_url="/api/v1/redoc" if settings.DEBUG else None,
     lifespan=lifespan,
+)
+
+# Create public API app for customer documentation (always enabled)
+public_app = FastAPI(
+    title="IP更换接口服务",
+    version="1.0.0",
+    description="提供代理IP更换服务的API接口 - 客户专用文档",
+    openapi_url="/openapi.json",
+    docs_url="/docs",
+    redoc_url="/redoc",
+)
+
+# Add middleware to public app
+public_app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.ALLOWED_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+public_app.add_middleware(
+    TrustedHostMiddleware,
+    allowed_hosts=getattr(settings, "ALLOWED_HOSTS", ["*"]),
 )
 
 # CORS
@@ -136,6 +161,10 @@ async def api_key_auth_middleware(request: Request, call_next):
         "/css/",
         "/js/",
         "/pages/",
+        "/public/docs",
+        "/public/redoc",
+        "/public/openapi.json",
+        "/public/info",
     ]
 
     # Check if path matches any skip pattern (exact match or prefix match)
@@ -275,6 +304,12 @@ if os.path.exists("frontend"):
 
 # Include API routes
 app.include_router(api_router)
+
+# Include public API routes in the public app
+public_app.include_router(public_router)
+
+# Mount public app as a sub-application
+app.mount("/public", public_app)
 
 
 if __name__ == "__main__":

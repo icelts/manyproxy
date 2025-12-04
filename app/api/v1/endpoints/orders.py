@@ -15,7 +15,7 @@ from app.models.order import OrderType, OrderStatus, PaymentMethod, CryptoCurren
 from app.models.user import User
 from app.api.v1.endpoints.session import get_current_active_user
 
-router = APIRouter(prefix="/orders", tags=["orders"])
+router = APIRouter(prefix="/orders", tags=["orders"], include_in_schema=False)
 
 
 @router.get("/", response_model=OrderList)

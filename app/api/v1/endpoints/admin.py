@@ -26,11 +26,11 @@ from app.models.user import User
 from app.models.order import Order, Payment, OrderType, OrderStatus
 from app.models.proxy import ProxyProduct
 
-router = APIRouter(prefix="/admin", tags=["admin"])
+router = APIRouter(prefix="/admin", tags=["admin"], include_in_schema=False)
 
 
 # 用户管理
-@router.get("/users", response_model=List[UserResponse])
+@router.get("/users", response_model=List[UserResponse], include_in_schema=False)
 async def get_users(
     page: int = Query(1, ge=1),
     size: int = Query(20, ge=1, le=100),

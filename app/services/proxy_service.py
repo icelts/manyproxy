@@ -1,6 +1,7 @@
 ﻿from decimal import Decimal, ROUND_HALF_UP
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
+from sqlalchemy import or_, func, update, and_
 from fastapi import HTTPException, status
 from app.models.proxy import ProxyProduct, ProxyOrder, APIUsage
 from app.models.user import User
@@ -97,6 +98,8 @@ class ProxyService:
         prefix: Optional[str] = None,
     ) -> Optional[ProxyOrder]:
         """Retrieve an active order by internal identifier or upstream token."""
+        await ProxyService._expire_user_orders(db, user_id)
+
         if not order_id and not token:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -120,6 +123,31 @@ class ProxyService:
             return None
 
         return proxy_order
+
+    @staticmethod
+    async def _expire_user_orders(db: AsyncSession, user_id: int) -> None:
+        """自动将已过期的订单标记为 expired，避免继续出现在活跃列表。"""
+        now = datetime.utcnow()
+        expire_stmt = (
+            update(ProxyOrder)
+            .where(
+                ProxyOrder.user_id == user_id,
+                ProxyOrder.status == "active",
+                ProxyOrder.expires_at.isnot(None),
+                ProxyOrder.expires_at <= now,
+            )
+            .values(status="expired")
+        )
+
+        result = await db.execute(expire_stmt)
+        rows = result.rowcount or 0
+        if rows:
+            await db.flush()
+            logger.info(
+                "Marked %d proxy orders as expired for user %s",
+                rows,
+                user_id,
+            )
 
     @staticmethod
     def _calculate_total_price(
@@ -428,37 +456,44 @@ class ProxyService:
     async def get_user_proxies(db: AsyncSession, user_id: int, 
                              category: Optional[str] = None,
                              page: int = 1, size: int = 20) -> ProxyListResponse:
-        """获取用户代理列表"""
-        query = select(ProxyOrder).where(ProxyOrder.user_id == user_id)
-        
+        """获取用户代理列表（仅返回未过期的活跃订单）"""
+        now = datetime.utcnow()
+        await ProxyService._expire_user_orders(db, user_id)
+        filters = [
+            ProxyOrder.user_id == user_id,
+            ProxyOrder.status == "active",
+            or_(
+                ProxyOrder.expires_at.is_(None),
+                ProxyOrder.expires_at > now
+            )
+        ]
+
         # 根据类别过滤
         if category:
             if category == "static":
-                query = query.where(ProxyOrder.order_id.like("STATIC_%"))
+                filters.append(ProxyOrder.order_id.like("STATIC_%"))
             elif category == "dynamic":
-                query = query.where(ProxyOrder.order_id.like("DYNAMIC_%"))
+                filters.append(ProxyOrder.order_id.like("DYNAMIC_%"))
             elif category == "mobile":
-                query = query.where(ProxyOrder.order_id.like("MOBILE_%"))
-        
-        # 分页
+                filters.append(ProxyOrder.order_id.like("MOBILE_%"))
+
+        # 构造分页查询
         offset = (page - 1) * size
-        query = query.offset(offset).limit(size).order_by(ProxyOrder.created_at.desc())
-        
+        query = (
+            select(ProxyOrder)
+            .where(*filters)
+            .order_by(ProxyOrder.created_at.desc())
+            .offset(offset)
+            .limit(size)
+        )
+
         result = await db.execute(query)
         proxies = result.scalars().all()
-        
+
         # 获取总数
-        count_query = select(ProxyOrder).where(ProxyOrder.user_id == user_id)
-        if category:
-            if category == "static":
-                count_query = count_query.where(ProxyOrder.order_id.like("STATIC_%"))
-            elif category == "dynamic":
-                count_query = count_query.where(ProxyOrder.order_id.like("DYNAMIC_%"))
-            elif category == "mobile":
-                count_query = count_query.where(ProxyOrder.order_id.like("MOBILE_%"))
-        
+        count_query = select(func.count()).where(*filters)
         count_result = await db.execute(count_query)
-        total = len(count_result.scalars().all())
+        total = count_result.scalar_one()
         
         return ProxyListResponse(
             proxies=[ProxyOrderResponse.from_orm(proxy) for proxy in proxies],
@@ -551,19 +586,47 @@ class ProxyService:
     @staticmethod
     async def get_proxy_stats(db: AsyncSession, user_id: int) -> ProxyStatsResponse:
         """获取代理统计信息"""
-        result = await db.execute(
-            select(ProxyOrder).where(ProxyOrder.user_id == user_id)
-        )
+        await ProxyService._expire_user_orders(db, user_id)
+        base_query = select(ProxyOrder).where(ProxyOrder.user_id == user_id)
+        result = await db.execute(base_query)
         orders = result.scalars().all()
 
+        now = datetime.utcnow()
+        active_filters = [
+            ProxyOrder.user_id == user_id,
+            ProxyOrder.status == "active",
+            or_(
+                ProxyOrder.expires_at.is_(None),
+                ProxyOrder.expires_at > now
+            )
+        ]
+        active_result = await db.execute(
+            select(ProxyOrder).where(*active_filters)
+        )
+        active_orders = active_result.scalars().all()
+
+        expired_filters = [
+            ProxyOrder.user_id == user_id,
+            or_(
+                ProxyOrder.status == "expired",
+                and_(
+                    ProxyOrder.expires_at.isnot(None),
+                    ProxyOrder.expires_at <= now
+                )
+            )
+        ]
+        expired_result = await db.execute(
+            select(func.count()).where(*expired_filters)
+        )
+        expired_proxies = expired_result.scalar_one() or 0
+
         total_proxies = len(orders)
-        active_proxies = len([o for o in orders if o.status == "active"])
-        expired_proxies = len([o for o in orders if o.status == "expired"])
+        active_proxies = len(active_orders)
 
         by_category = {"static": 0, "dynamic": 0, "mobile": 0}
         by_provider = {}
 
-        for order in orders:
+        for order in active_orders:
             if order.order_id.startswith("STATIC_"):
                 by_category["static"] += 1
                 # 尝试从多个可能的字段获取provider信息
@@ -613,6 +676,7 @@ class ProxyService:
                                 target_provider: str, protocol: str = "HTTP",
                                 username: str = "random", password: str = "random") -> Dict[str, Any]:
         """更换静态代理类型"""
+        await ProxyService._expire_user_orders(db, user_id)
         # 获取订单信息
         result = await db.execute(
             select(ProxyOrder).where(
@@ -685,6 +749,7 @@ class ProxyService:
                                   protocol: str = "HTTP", username: str = "random", 
                                   password: str = "random") -> Dict[str, Any]:
         """更改代理安全信息"""
+        await ProxyService._expire_user_orders(db, user_id)
         # 获取订单信息
         result = await db.execute(
             select(ProxyOrder).where(
@@ -754,6 +819,7 @@ class ProxyService:
     @staticmethod
     async def renew_static_proxy(db: AsyncSession, user_id: int, order_id: str, days: int) -> Dict[str, Any]:
         """续费静态代理"""
+        await ProxyService._expire_user_orders(db, user_id)
         # 获取订单信息
         result = await db.execute(
             select(ProxyOrder).where(
@@ -849,6 +915,7 @@ class ProxyService:
     @staticmethod
     async def renew_static_proxy_auto(db: AsyncSession, user_id: int, order_id: str) -> Dict[str, Any]:
         """自动续费静态代理（按原套餐时长）"""
+        await ProxyService._expire_user_orders(db, user_id)
         # 获取订单信息
         result = await db.execute(
             select(ProxyOrder).where(
@@ -959,6 +1026,7 @@ class ProxyService:
     @staticmethod
     async def export_static_proxies(db: AsyncSession, user_id: int) -> Dict[str, Any]:
         """导出所有静态代理为txt格式"""
+        await ProxyService._expire_user_orders(db, user_id)
         # 获取用户的所有静态代理
         result = await db.execute(
             select(ProxyOrder).where(
@@ -1005,6 +1073,7 @@ class ProxyService:
     @staticmethod
     async def export_dynamic_proxies(db: AsyncSession, user_id: int) -> Dict[str, Any]:
         """导出所有动态代理的key"""
+        await ProxyService._expire_user_orders(db, user_id)
         # 获取用户的所有动态代理
         result = await db.execute(
             select(ProxyOrder).where(
@@ -1044,6 +1113,7 @@ class ProxyService:
     async def get_upstream_proxy_list(db: AsyncSession, user_id: int, provider: str, 
                                     proxy_id: Optional[str] = None) -> Dict[str, Any]:
         """获取上游代理列表"""
+        await ProxyService._expire_user_orders(db, user_id)
         # 验证用户是否有该类型的代理
         result = await db.execute(
             select(ProxyOrder).where(

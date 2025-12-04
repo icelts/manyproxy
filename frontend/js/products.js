@@ -210,9 +210,7 @@ class ProductsPage {
         modalBody.innerHTML = `
             ${this.buildPurchaseOverview(product, quantity, unitPrice, durationDays)}
             ${product.category === 'static' ? this.buildStaticPurchaseForm(product) : ''}
-            <div id="purchase-result" class="alert d-none mt-3" role="alert"></div>
         `;
-        this.clearPurchaseResult();
 
         const modal = new bootstrap.Modal(document.getElementById('confirmPurchaseModal'));
         document.getElementById('confirm-purchase-btn').onclick = () => this.confirmPurchase(product, quantity, modal);
@@ -247,8 +245,8 @@ class ProductsPage {
                 password: 'random',
                 providerOverride
             };
-            await this.submitStaticPurchase(providerData.product, quantity, inlineValues, { inline: true });
-            await this.updateBalance();
+            await this.submitStaticPurchase(providerData.product, quantity, inlineValues);
+            await this.handlePurchaseSuccess();
         } catch (error) {
             if (this.handleApiKeyError(error)) {
                 return;
@@ -265,10 +263,10 @@ class ProductsPage {
                 if (this.purchaseCompleted) {
                     return;
                 }
-                await this.submitStaticPurchase(product, quantity);
-                await this.updateBalance();
+                await this.submitStaticPurchase(product, quantity, null);
                 this.purchaseCompleted = true;
                 this.disableConfirmButton();
+                await this.handlePurchaseSuccess(modal);
                 return;
             } else if (product.category === 'dynamic') {
                 await api.post('/proxy/dynamic/buy', {
@@ -287,10 +285,7 @@ class ProductsPage {
                     quantity
                 });
             }
-
-            this.showToast(i18n?.t('products.toast.creationSuccess') || '成功创建购买，订单正在处理中', 'success');
-            await this.updateBalance();
-            modal.hide();
+            await this.handlePurchaseSuccess(modal);
         } catch (error) {
             if (this.handleApiKeyError(error)) {
                 modal.hide();
@@ -299,15 +294,12 @@ class ProductsPage {
             console.error('购买产品失败:', error);
             const message = error.response?.detail || error.message || i18n?.t('products.toast.createFailed') || '购买失败，请稍后重试';
             this.showToast(message, 'error');
-            this.showPurchaseResult(false, `<strong>${i18n?.t('products.result.errorTitle') || '请求失败'}</strong><br>${message}`);
         }
     }
 
     async submitStaticPurchase(product, quantity, inlineValues = null) {
         const formValues = inlineValues || this.readStaticFormValues();
-        const unitPrice = Number(product.price || 0);
-        const durationDays = product.duration_days || 30;
-        
+
         const providerOverride = inlineValues?.providerOverride;
         const payload = {
             product_id: product.id,
@@ -319,10 +311,7 @@ class ProductsPage {
         };
 
         const order = await api.post('/proxy/static/buy', payload);
-        this.showToast(i18n?.t('products.toast.creationSuccess') || '购买请求创建成功，正在处理中', 'success');
-        if (!inlineValues) {
-            this.renderStaticPurchaseResult(order, product, formValues, unitPrice, quantity);
-        }
+        return order;
     }
 
     buildPurchaseOverview(product, quantity, unitPrice, durationDays) {
@@ -400,40 +389,6 @@ class ProductsPage {
         return { protocol, username, password };
     }
 
-    renderStaticPurchaseResult(order, product, formValues, unitPrice, quantity) {
-        const info = order.proxy_info || {};
-        const provider = info.loaiproxy || product.provider;
-        const proxyLine = info.proxy || `${info.ip || '-'}:${info.port || ''}`;
-        const expiresAt = order.expires_at || (info.time ? new Date(info.time * 1000).toISOString() : null);
-        const totalPrice = (unitPrice * quantity).toFixed(2);
-        const rows = [
-            { label: i18n?.t('products.result.orderId') || '订单号', value: order.order_id },
-            { label: i18n?.t('products.result.upstreamId') || '上游ID', value: order.upstream_id || info.idproxy || '-' },
-            { label: i18n?.t('products.result.provider') || '供应商', value: provider },
-            { label: i18n?.t('products.result.username') || '用户名', value: info.user || formValues.username },
-            { label: i18n?.t('products.result.password') || '密码', value: info.password || formValues.password },
-            { label: i18n?.t('products.labels.quantity') || '数量', value: quantity },
-            { label: i18n?.t('products.result.unitPrice') || '单价', value: `$${Number(unitPrice || 0).toFixed(2)}` },
-            { label: i18n?.t('products.result.total') || '总价', value: `$${totalPrice}` },
-            { label: i18n?.t('products.result.proxy') || '代理', value: proxyLine },
-            { label: i18n?.t('products.result.expires') || '到期时间', value: this.formatDateTime(expiresAt) }
-        ];
-
-        const details = `
-            <div class="mb-2">
-                <strong>${i18n?.t('products.result.title') || '购买成功'}</strong>
-            </div>
-            <p class="small text-muted mb-3">${i18n?.t('products.result.copyTip') || '请立即复制下方信息并妥善保管。'}</p>
-            <dl class="row mb-0">
-                ${rows.map((row) => `
-                    <dt class="col-sm-4">${row.label}</dt>
-                    <dd class="col-sm-8 text-break">${row.value || '-'}</dd>
-                `).join('')}
-            </dl>
-        `;
-        this.showPurchaseResult(true, details);
-    }
-
     formatDateTime(value) {
         if (!value) return '-';
         try {
@@ -441,22 +396,6 @@ class ProductsPage {
             return date.toLocaleString(i18n?.currentLang === 'en' ? 'en-US' : 'zh-CN', { hour12: false });
         } catch {
             return value;
-        }
-    }
-
-    showPurchaseResult(success, html) {
-        const container = document.getElementById('purchase-result');
-        if (!container) return;
-        container.className = `alert mt-3 ${success ? 'alert-success' : 'alert-danger'}`;
-        container.innerHTML = html;
-        container.classList.remove('d-none');
-    }
-
-    clearPurchaseResult() {
-        const container = document.getElementById('purchase-result');
-        if (container) {
-            container.className = 'alert d-none mt-3';
-            container.innerHTML = '';
         }
     }
 
@@ -706,18 +645,41 @@ class ProductsPage {
         });
     }
 
+    async handlePurchaseSuccess(modal = null) {
+        try {
+            await this.updateBalance();
+        } catch (error) {
+            console.warn('Failed to refresh balance after purchase', error);
+        }
+        const message = i18n?.t('products.toast.successRedirect') || '购买成功，正在跳转到代理管理页...';
+        this.showToast(message, 'success');
+        if (modal) {
+            modal.hide();
+        }
+        this.redirectToProxyManagement();
+    }
+
+    redirectToProxyManagement() {
+        setTimeout(() => {
+            window.location.href = 'proxy.html';
+        }, 1500);
+    }
+
     showToast(message, type = 'info') {
         const toastEl = document.getElementById('toast');
         const toastMessage = document.getElementById('toast-message');
         if (!toastEl || !toastMessage) return;
 
         toastEl.className = 'toast';
-        toastEl.classList.add(
-            type === 'success' ? 'bg-success text-white' :
-            type === 'error' ? 'bg-danger text-white' :
-            type === 'warning' ? 'bg-warning text-dark' :
-            'bg-info text-white'
-        );
+        let typeClasses = ['bg-info', 'text-white'];
+        if (type === 'success') {
+            typeClasses = ['bg-success', 'text-white'];
+        } else if (type === 'error') {
+            typeClasses = ['bg-danger', 'text-white'];
+        } else if (type === 'warning') {
+            typeClasses = ['bg-warning', 'text-dark'];
+        }
+        toastEl.classList.add(...typeClasses);
         toastMessage.textContent = message;
         new bootstrap.Toast(toastEl).show();
     }

@@ -15,7 +15,7 @@ from app.schemas.user import APIKeyCreate, APIKeyResponse, PasswordChange, UserC
 from app.services.session_service import SessionService
 from app.utils.cache import CacheService
 
-router = APIRouter(prefix="/session", tags=["session"])
+router = APIRouter(prefix="/session", tags=["session"], include_in_schema=False)
 security = HTTPBearer()
 
 
@@ -52,14 +52,14 @@ async def get_current_admin_user(current_user: User = Depends(get_current_active
     return current_user
 
 
-@router.post("/register", response_model=SessionEnvelope)
+@router.post("/register", response_model=SessionEnvelope, include_in_schema=False)
 async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
     """注册并立即返回会话状态。"""
     user = await SessionService.register_user(db, user_data)
     return await SessionService.build_session_envelope(user, db=db)
 
 
-@router.post("/login", response_model=SessionEnvelope)
+@router.post("/login", response_model=SessionEnvelope, include_in_schema=False)
 async def login(login_data: SessionLogin, db: AsyncSession = Depends(get_db)):
     """登录并返回统一会话状态。"""
     user = await SessionService.authenticate_credentials(db, login_data.username, login_data.password)
@@ -72,7 +72,7 @@ async def login(login_data: SessionLogin, db: AsyncSession = Depends(get_db)):
     return await SessionService.build_session_envelope(user, db=db)
 
 
-@router.get("/state", response_model=SessionEnvelope)
+@router.get("/state", response_model=SessionEnvelope, include_in_schema=False)
 async def session_state(
     db: AsyncSession = Depends(get_db),
     credentials: HTTPAuthorizationCredentials = Depends(security),
@@ -98,13 +98,13 @@ async def session_state(
     return await SessionService.build_session_envelope(user, existing_token=credentials.credentials, db=db)
 
 
-@router.post("/logout", response_model=SessionLogoutResponse)
+@router.post("/logout", response_model=SessionLogoutResponse, include_in_schema=False)
 async def logout():
     """前端丢弃本地状态即可，这里仅返回统一响应。"""
     return SessionLogoutResponse()
 
 
-@router.post("/api-keys", response_model=APIKeyResponse)
+@router.post("/api-keys", response_model=APIKeyResponse, include_in_schema=False)
 async def create_api_key(
     api_key_data: APIKeyCreate,
     db: AsyncSession = Depends(get_db),
@@ -115,7 +115,7 @@ async def create_api_key(
     return APIKeyResponse.from_orm(api_key)
 
 
-@router.get("/api-keys", response_model=List[APIKeyResponse])
+@router.get("/api-keys", response_model=List[APIKeyResponse], include_in_schema=False)
 async def list_api_keys(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
@@ -128,7 +128,7 @@ async def list_api_keys(
     return [APIKeyResponse.from_orm(key) for key in api_keys]
 
 
-@router.put("/api-keys/{key_id}")
+@router.put("/api-keys/{key_id}", include_in_schema=False)
 async def rotate_api_key(
     key_id: int,
     db: AsyncSession = Depends(get_db),
@@ -139,7 +139,7 @@ async def rotate_api_key(
     return {"api_key": api_key.api_key, "message": "API key rotated successfully"}
 
 
-@router.delete("/api-keys/{key_id}")
+@router.delete("/api-keys/{key_id}", include_in_schema=False)
 async def delete_api_key(
     key_id: int,
     db: AsyncSession = Depends(get_db),
@@ -158,7 +158,7 @@ async def delete_api_key(
     return {"message": "API key deleted successfully"}
 
 
-@router.post("/change-password")
+@router.post("/change-password", include_in_schema=False)
 async def change_password(
     payload: PasswordChange,
     db: AsyncSession = Depends(get_db),
