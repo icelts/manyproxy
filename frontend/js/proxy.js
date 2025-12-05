@@ -3,6 +3,7 @@ class ProxyManager {
         this.proxies = { static: [], dynamic: [], mobile: [] };
         this.handleCopyClick = this.handleCopyClick.bind(this);
         document.addEventListener('click', this.handleCopyClick);
+        this.isRenewing = new Set(); // 跟踪正在续费的订单
         this.init();
     }
 
@@ -94,6 +95,7 @@ class ProxyManager {
 
         container.innerHTML = this.proxies.static.map((order) => {
             const infoHtml = this.renderStaticInfo(order);
+            const isRenewing = this.isRenewing.has(order.order_id);
             return `
                 <tr>
                     <td>
@@ -105,10 +107,12 @@ class ProxyManager {
                     <td>${this.formatDate(order.expires_at)}</td>
                     <td>
                         <div class="btn-group" role="group">
-                            <button class="btn btn-outline-primary btn-sm" 
+                            <button class="btn btn-outline-primary btn-sm ${isRenewing ? 'disabled' : ''}" 
                                     onclick="proxyManager.renewStaticProxy('${order.order_id}')"
-                                    title="续费">
-                                <i class="fas fa-redo"></i>
+                                    title="${isRenewing ? '续费中...' : '续费'}"
+                                    ${isRenewing ? 'disabled' : ''}>
+                                <i class="fas fa-${isRenewing ? 'spinner fa-spin' : 'redo'}"></i>
+                                ${isRenewing ? '续费中...' : ''}
                             </button>
                             <button class="btn btn-outline-success btn-sm" 
                                     onclick="proxyManager.exportStaticProxies()"
@@ -131,26 +135,37 @@ class ProxyManager {
             return;
         }
 
-        container.innerHTML = this.proxies.dynamic.map((order) => `
-            <tr>
-                <td>
-                    <div class="fw-semibold">${order.order_id}</div>
-                    <div class="text-muted small">${this.formatDate(order.created_at)}</div>
-                </td>
-                <td>${this.renderTokenCell(order.upstream_id)}</td>
-                <td>${this.renderStatusBadge(order.status)}</td>
-                <td>${this.formatDate(order.expires_at)}</td>
-                <td>
-                    <div class="btn-group" role="group">
-                        <button class="btn btn-outline-success btn-sm" 
-                                onclick="proxyManager.exportDynamicProxies()"
-                                title="导出全部">
-                            <i class="fas fa-download"></i>
-                        </button>
-                    </div>
-                </td>
-            </tr>
-        `).join('');
+        container.innerHTML = this.proxies.dynamic.map((order) => {
+            const renewKey = order.upstream_id || order.order_id;
+            const isRenewing = this.isRenewing.has(renewKey);
+            return `
+                <tr>
+                    <td>
+                        <div class="fw-semibold">${order.order_id}</div>
+                        <div class="text-muted small">${this.formatDate(order.created_at)}</div>
+                    </td>
+                    <td>${this.renderTokenCell(order.upstream_id)}</td>
+                    <td>${this.renderStatusBadge(order.status)}</td>
+                    <td>${this.formatDate(order.expires_at)}</td>
+                    <td>
+                        <div class="btn-group" role="group">
+                            <button class="btn btn-outline-primary btn-sm ${isRenewing ? 'disabled' : ''}" 
+                                    onclick="proxyManager.renewDynamicProxy('${order.order_id}', '${order.upstream_id || ''}')"
+                                    title="${isRenewing ? '续费中...' : '续费'}"
+                                    ${isRenewing ? 'disabled' : ''}>
+                                <i class="fas fa-${isRenewing ? 'spinner fa-spin' : 'redo'}"></i>
+                                ${isRenewing ? '续费中...' : ''}
+                            </button>
+                            <button class="btn btn-outline-success btn-sm" 
+                                    onclick="proxyManager.exportDynamicProxies()"
+                                    title="导出全部">
+                                <i class="fas fa-download"></i>
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+            `;
+        }).join('');
     }
 
     renderMobileProxies() {
@@ -263,10 +278,26 @@ class ProxyManager {
     }
 
     async renewStaticProxy(orderId) {
+        // 防止重复点击
+        if (this.isRenewing.has(orderId)) {
+            return;
+        }
+
         try {
-            this.showToast('正在续费代理...', 'info');
+            // 标记为续费中
+            this.isRenewing.add(orderId);
+            this.renderStaticProxies(); // 更新按钮状态
+            
+            // 显示续费进度弹窗
+            this.showRenewalProgressModal('静态代理', orderId);
             
             const response = await api.post(`/proxy/static/${orderId}/renew`);
+            
+            // 移除续费标记
+            this.isRenewing.delete(orderId);
+            
+            // 关闭进度弹窗
+            this.hideRenewalProgressModal();
             
             if (response.renewal_info) {
                 const info = response.renewal_info;
@@ -274,6 +305,9 @@ class ProxyManager {
                     `续费成功！续费${info.duration_days}天，费用：¥${info.amount}，余额：¥${info.new_balance}`,
                     'success'
                 );
+                
+                // 显示详细的成功弹窗
+                this.showRenewalSuccessModal(info);
             } else {
                 this.showToast('续费成功！', 'success');
             }
@@ -282,9 +316,201 @@ class ProxyManager {
             await this.loadProxyList();
             
         } catch (error) {
+            // 移除续费标记
+            this.isRenewing.delete(orderId);
+            
+            // 关闭进度弹窗
+            this.hideRenewalProgressModal();
+            
+            // 更新按钮状态
+            this.renderStaticProxies();
+            
             console.error('续费失败:', error);
             this.showToast(error.message || '续费失败，请稍后再试', 'error');
         }
+    }
+
+    async renewDynamicProxy(orderId, token) {
+        const renewKey = token || orderId;
+        
+        // 防止重复点击
+        if (this.isRenewing.has(renewKey)) {
+            return;
+        }
+
+        if (!orderId && !token) {
+            this.showToast('无法确定续费的动态代理', 'error');
+            return;
+        }
+
+        try {
+            // 标记为续费中
+            this.isRenewing.add(renewKey);
+            this.renderDynamicProxies(); // 更新按钮状态
+            
+            // 显示续费进度弹窗
+            this.showRenewalProgressModal('动态代理', renewKey);
+            
+            let endpoint;
+            if (token) {
+                endpoint = `/proxy/dynamic/token/${encodeURIComponent(token)}/renew`;
+            } else {
+                endpoint = `/proxy/dynamic/${orderId}/renew`;
+            }
+            
+            const response = await api.post(endpoint);
+            
+            // 移除续费标记
+            this.isRenewing.delete(renewKey);
+            
+            // 关闭进度弹窗
+            this.hideRenewalProgressModal();
+            
+            if (response.renewal_info) {
+                const info = response.renewal_info;
+                this.showToast(
+                    `续费成功！续费${info.duration_days}天，费用：¥${info.amount}，余额：¥${info.new_balance}`,
+                    'success'
+                );
+                
+                // 显示详细的成功弹窗
+                this.showRenewalSuccessModal(info);
+            } else {
+                this.showToast('续费成功！', 'success');
+            }
+            
+            // 刷新代理列表
+            await this.loadProxyList();
+            
+        } catch (error) {
+            // 移除续费标记
+            this.isRenewing.delete(renewKey);
+            
+            // 关闭进度弹窗
+            this.hideRenewalProgressModal();
+            
+            // 更新按钮状态
+            this.renderDynamicProxies();
+            
+            console.error('续费动态代理失败:', error);
+            this.showToast(error.message || '续费失败，请稍后再试', 'error');
+        }
+    }
+
+    showRenewalProgressModal(proxyType, identifier) {
+        // 创建进度提示模态框
+        const modal = document.createElement('div');
+        modal.className = 'modal fade';
+        modal.id = 'renewalProgressModal';
+        modal.innerHTML = `
+            <div class="modal-dialog modal-sm">
+                <div class="modal-content">
+                    <div class="modal-header bg-info text-white">
+                        <h5 class="modal-title">
+                            <i class="fas fa-clock"></i> 正在续费
+                        </h5>
+                    </div>
+                    <div class="modal-body text-center">
+                        <div class="mb-3">
+                            <i class="fas fa-spinner fa-spin fa-3x text-info"></i>
+                        </div>
+                        <p class="mb-2">正在续费${proxyType}...</p>
+                        <p class="text-muted small mb-0">
+                            <code>${identifier}</code>
+                        </p>
+                        <div class="progress mt-3">
+                            <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                                 role="progressbar" 
+                                 style="width: 100%">
+                                处理中...
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer bg-light">
+                        <small class="text-muted">
+                            <i class="fas fa-info-circle"></i> 
+                            请稍候，正在与上游服务器通信...
+                        </small>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(modal);
+        const bsModal = new bootstrap.Modal(modal, {
+            backdrop: 'static',
+            keyboard: false
+        });
+        bsModal.show();
+        
+        // 存储模态框引用
+        this.currentProgressModal = bsModal;
+    }
+
+    hideRenewalProgressModal() {
+        if (this.currentProgressModal) {
+            this.currentProgressModal.hide();
+            this.currentProgressModal = null;
+            
+            // 移除DOM元素
+            const modal = document.getElementById('renewalProgressModal');
+            if (modal) {
+                modal.addEventListener('hidden.bs.modal', () => {
+                    if (modal.parentNode) {
+                        document.body.removeChild(modal);
+                    }
+                });
+            }
+        }
+    }
+
+    showRenewalSuccessModal(renewalInfo) {
+        // 创建成功提示模态框
+        const modal = document.createElement('div');
+        modal.className = 'modal fade';
+        modal.innerHTML = `
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header bg-success text-white">
+                        <h5 class="modal-title">
+                            <i class="fas fa-check-circle"></i> 续费成功
+                        </h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="alert alert-success">
+                            <h6><i class="fas fa-info-circle"></i> 续费详情</h6>
+                            <ul class="mb-0">
+                                <li><strong>续费时长：</strong>${renewalInfo.duration_days} 天</li>
+                                <li><strong>续费费用：</strong>¥${renewalInfo.amount}</li>
+                                <li><strong>账户余额：</strong>¥${renewalInfo.new_balance}</li>
+                                <li><strong>原到期时间：</strong>${this.formatDate(renewalInfo.old_expires_at)}</li>
+                                <li><strong>新到期时间：</strong>${this.formatDate(renewalInfo.new_expires_at)}</li>
+                            </ul>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-success" data-bs-dismiss="modal">
+                            <i class="fas fa-check"></i> 确定
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(modal);
+        const bsModal = new bootstrap.Modal(modal);
+        bsModal.show();
+        
+        // 模态框关闭后移除DOM元素
+        modal.addEventListener('hidden.bs.modal', () => {
+            document.body.removeChild(modal);
+        });
+        
+        // 5秒后自动关闭
+        setTimeout(() => {
+            bsModal.hide();
+        }, 5000);
     }
 
     async exportStaticProxies() {
@@ -350,13 +576,21 @@ class ProxyManager {
         const toastMessage = document.getElementById('toast-message');
         if (!toastEl || !toastMessage) return;
 
+        // 清除所有现有的背景类
         toastEl.className = 'toast';
-        toastEl.classList.add(
-            type === 'success' ? 'bg-success text-white' :
-            type === 'error' ? 'bg-danger text-white' :
-            type === 'warning' ? 'bg-warning text-dark' :
-            'bg-info text-white'
-        );
+        toastEl.classList.remove('bg-success', 'bg-danger', 'bg-warning', 'bg-info', 'text-white', 'text-dark');
+        
+        // 根据类型添加相应的类
+        if (type === 'success') {
+            toastEl.classList.add('bg-success', 'text-white');
+        } else if (type === 'error') {
+            toastEl.classList.add('bg-danger', 'text-white');
+        } else if (type === 'warning') {
+            toastEl.classList.add('bg-warning', 'text-dark');
+        } else {
+            toastEl.classList.add('bg-info', 'text-white');
+        }
+        
         toastMessage.textContent = message;
         const bsToast = new bootstrap.Toast(toastEl);
         bsToast.show();

@@ -119,7 +119,7 @@ class ProxyService:
         result = await db.execute(query)
         proxy_order = result.scalar_one_or_none()
 
-        if proxy_order and prefix and not proxy_order.order_id.startswith(prefix):
+        if proxy_order and prefix and order_id and not proxy_order.order_id.startswith(prefix):
             return None
 
         return proxy_order
@@ -541,6 +541,210 @@ class ProxyService:
             )
 
         return upstream_result
+
+    @staticmethod
+    async def renew_dynamic_proxy(db: AsyncSession, user_id: int, order_id: str, days: int) -> Dict[str, Any]:
+        """续费动态代理"""
+        await ProxyService._expire_user_orders(db, user_id)
+        
+        # 获取订单信息
+        result = await db.execute(
+            select(ProxyOrder).where(
+                ProxyOrder.user_id == user_id,
+                ProxyOrder.order_id == order_id,
+                ProxyOrder.status == "active"
+            )
+        )
+        proxy_order = result.scalar_one_or_none()
+        
+        if not proxy_order:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Proxy order not found or inactive"
+            )
+        
+        # 获取产品信息来确定原套餐时长
+        product_result = await db.execute(
+            select(ProxyProduct).where(ProxyProduct.id == proxy_order.product_id)
+        )
+        product = product_result.scalar_one_or_none()
+        
+        if not product:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Product not found"
+            )
+        
+        # 获取动态代理密钥
+        if not proxy_order.upstream_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No proxy key found for renewal"
+            )
+        
+        # 调用上游API续费
+        try:
+            upstream_result = await DynamicProxyService.renew_rotation_key(
+                key=proxy_order.upstream_id,
+                duration_days=days
+            )
+        except Exception as e:
+            logger.error(f"Failed to renew dynamic proxy: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to renew proxy from upstream"
+            )
+        
+        # 检查上游API响应状态
+        if upstream_result.get("status") != 100:
+            error_msg = upstream_result.get("comen", "Unknown error")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Upstream API error: {error_msg}"
+            )
+        
+        # 更新到期时间
+        new_expires_at = datetime.utcnow() + timedelta(days=days)
+        proxy_order.expires_at = new_expires_at
+        
+        # 更新代理信息
+        if proxy_order.proxy_info and isinstance(proxy_order.proxy_info, dict):
+            proxy_order.proxy_info.update({
+                "renewal_status": upstream_result.get("status"),
+                "renewal_message": upstream_result.get("comen"),
+                "last_renewed": datetime.utcnow().isoformat()
+            })
+        else:
+            proxy_order.proxy_info = upstream_result
+        
+        await db.commit()
+        
+        return {
+            "upstream_result": upstream_result,
+            "new_expires_at": new_expires_at.isoformat(),
+            "order_id": order_id,
+            "renewal_days": days
+        }
+
+    @staticmethod
+    async def renew_dynamic_proxy_auto(db: AsyncSession, user_id: int,
+                                      order_id: Optional[str] = None,
+                                      token: Optional[str] = None) -> Dict[str, Any]:
+        """自动续费动态代理（按原套餐时长）"""
+        await ProxyService._expire_user_orders(db, user_id)
+
+        if not order_id and not token:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="order_id or token is required"
+            )
+
+        proxy_order = await ProxyService._get_active_order(
+            db,
+            user_id,
+            order_id=order_id,
+            token=token,
+            prefix="DYNAMIC_"
+        )
+
+        if not proxy_order:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Proxy order not found or inactive"
+            )
+        
+        # 获取产品信息来确定原套餐时长
+        product_result = await db.execute(
+            select(ProxyProduct).where(ProxyProduct.id == proxy_order.product_id)
+        )
+        product = product_result.scalar_one_or_none()
+        
+        if not product:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Product not found"
+            )
+        
+        # 获取原套餐时长
+        duration_days = product.duration_days
+        if not duration_days or duration_days < 1:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Product duration is not configured"
+            )
+        
+        # 计算续费费用
+        total_price = ProxyService._calculate_total_price(product, 1)
+        
+        # 检查用户余额
+        user_result = await db.execute(select(User).where(User.id == user_id))
+        user = user_result.scalar_one_or_none()
+        if not user:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+        
+        current_balance = Decimal(user.balance or 0)
+        if current_balance < total_price:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Insufficient balance")
+        
+        # 扣除余额
+        balance_before = current_balance
+        new_balance = ProxyService._quantize(balance_before - total_price)
+        user.balance = new_balance
+        
+        # 创建交易记录
+        now = datetime.utcnow()
+        description = f"Renew {product.product_name} for {duration_days} days"
+        
+        order = Order(
+            order_number=await OrderService.generate_order_number(),
+            user_id=user.id,
+            type=OrderType.PURCHASE,
+            amount=total_price,
+            status=OrderStatus.COMPLETED,
+            description=description,
+            paid_at=now,
+            completed_at=now,
+        )
+        db.add(order)
+        await db.flush()
+
+        transaction = Transaction(
+            transaction_id=await OrderService.generate_transaction_id(),
+            order_id=order.id,
+            user_id=user.id,
+            type="renewal",
+            amount=total_price,
+            balance_before=balance_before,
+            balance_after=new_balance,
+            description=description,
+        )
+        db.add(transaction)
+
+        balance_log = BalanceLog(
+            user_id=user.id,
+            type="renewal",
+            amount=total_price,
+            balance_before=balance_before,
+            balance_after=new_balance,
+            description=description,
+            related_order_id=order.id,
+        )
+        db.add(balance_log)
+        
+        # 调用原有的续费方法
+        upstream_result = await ProxyService.renew_dynamic_proxy(
+            db, user_id, proxy_order.order_id, duration_days
+        )
+
+        return {
+            "upstream_result": upstream_result,
+            "renewal_info": {
+                "duration_days": duration_days,
+                "amount": total_price,
+                "new_balance": new_balance,
+                "description": description
+            }
+        }
     
     @staticmethod
     async def reset_mobile_proxy(db: AsyncSession, user_id: int,

@@ -258,9 +258,11 @@ class ProductsPage {
     }
 
     async confirmPurchase(product, quantity, modal) {
+        this.lockConfirmButton();
         try {
             if (product.category === 'static') {
                 if (this.purchaseCompleted) {
+                    this.unlockConfirmButton();
                     return;
                 }
                 await this.submitStaticPurchase(product, quantity, null);
@@ -268,13 +270,18 @@ class ProductsPage {
                 this.disableConfirmButton();
                 await this.handlePurchaseSuccess(modal);
                 return;
-            } else if (product.category === 'dynamic') {
+            }
+            if (product.category === 'dynamic') {
                 await api.post('/proxy/dynamic/buy', {
                     product_id: product.id,
                     quantity
                 });
-            } else if (product.category === 'mobile') {
+                await this.handlePurchaseSuccess(modal);
+                return;
+            }
+            if (product.category === 'mobile') {
                 if (quantity > 1) {
+                    this.unlockConfirmButton();
                     this.showToast(i18n?.t('products.toast.invalidQuantity') || '购买数量必须在 1-100 之间', 'warning');
                     return;
                 }
@@ -284,9 +291,12 @@ class ProductsPage {
                     package_id: upstreamPackage,
                     quantity
                 });
+                await this.handlePurchaseSuccess(modal);
+                return;
             }
             await this.handlePurchaseSuccess(modal);
         } catch (error) {
+            this.unlockConfirmButton();
             if (this.handleApiKeyError(error)) {
                 modal.hide();
                 return;
@@ -616,6 +626,20 @@ class ProductsPage {
         if (btn) {
             btn.disabled = false;
             btn.textContent = i18n?.t('products.modalConfirm') || '确认购买';
+        }
+    }
+
+    lockConfirmButton() {
+        const btn = document.getElementById('confirm-purchase-btn');
+        if (btn) {
+            btn.disabled = true;
+        }
+    }
+
+    unlockConfirmButton() {
+        const btn = document.getElementById('confirm-purchase-btn');
+        if (btn) {
+            btn.disabled = false;
         }
     }
 

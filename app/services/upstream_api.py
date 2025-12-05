@@ -412,7 +412,16 @@ class DynamicProxyService(UpstreamAPIService):
             "thoigian": duration_days
         }
         
-        return await cls._make_request("GET", url, params=params)
+        logger.info(f"续费动态代理密钥: {url}")
+        logger.info(f"参数: {params}")
+        
+        try:
+            result = await cls._make_request("GET", url, params=params)
+            logger.info(f"续费动态代理响应: {result}")
+            return result
+        except Exception as e:
+            logger.error(f"续费动态代理失败: {e}")
+            raise
     
     @classmethod
     async def get_rotation_keys(cls) -> Dict[str, Any]:

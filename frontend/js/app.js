@@ -348,6 +348,9 @@ class App {
         
         // 设置toast样式
         toast.className = 'toast';
+        // 清除所有现有的背景类
+        toast.classList.remove('bg-success', 'bg-danger', 'bg-warning', 'bg-info', 'text-white', 'text-dark');
+        
         switch (type) {
             case 'success':
                 toast.classList.add('bg-success', 'text-white');

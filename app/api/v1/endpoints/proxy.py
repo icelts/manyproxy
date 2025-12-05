@@ -192,6 +192,24 @@ async def renew_static_proxy(
     return await ProxyService.renew_static_proxy_auto(db, user_id, order_id)
 
 
+@router.post("/dynamic/{order_id}/renew", include_in_schema=False)
+async def renew_dynamic_proxy(
+    order_id: str,
+    db: AsyncSession = Depends(get_db),
+    user_id: int = Depends(get_current_api_user)):
+    """续费动态代理（按原套餐时长自动续费）"""
+    return await ProxyService.renew_dynamic_proxy_auto(db, user_id, order_id=order_id)
+
+
+@router.post("/dynamic/token/{token}/renew", include_in_schema=False)
+async def renew_dynamic_proxy_by_token(
+    token: str,
+    db: AsyncSession = Depends(get_db),
+    user_id: int = Depends(get_current_api_user)):
+    """通过上游token续费动态代理"""
+    return await ProxyService.renew_dynamic_proxy_auto(db, user_id, token=token)
+
+
 @router.get("/static/export", include_in_schema=False)
 async def export_static_proxies(
     db: AsyncSession = Depends(get_db),
