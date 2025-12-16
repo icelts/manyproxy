@@ -292,7 +292,7 @@ class OrderService:
         if payment_method == PaymentMethod.CRYPTO and crypto_currency:
             # 预先生成支付ID，确保链路一致
             payment_identifier = await OrderService.generate_payment_id()
-            crypto_payment = crypto_payment_service.create_payment(
+            crypto_payment = await crypto_payment_service.create_payment(
                 float(amount),
                 crypto_currency.value,
                 payment_id=payment_identifier
@@ -361,7 +361,7 @@ class OrderService:
         
         # 检查确认数是否足够
         status = "confirmed" if confirmations >= payment.required_confirmations else "pending"
-        crypto_payment_service.update_payment_status(
+        await crypto_payment_service.update_payment_status(
             payment_id=payment_id,
             status=status,
             transaction_hash=transaction_hash,

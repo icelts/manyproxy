@@ -1,0 +1,396 @@
+"""
+Cryptomus支付网关Python客户端
+提供与Cryptomus API的完整集成
+"""
+
+import hashlib
+import hmac
+import json
+import logging
+from typing import Dict, Optional, Any, List
+from decimal import Decimal
+import aiohttp
+from datetime import datetime
+
+from app.core.config import settings
+
+logger = logging.getLogger(__name__)
+
+
+class CryptomusClient:
+    """Cryptomus支付网关客户端"""
+    
+    def __init__(self, api_key: str = None, merchant_uuid: str = None, base_url: str = None):
+        """
+        初始化Cryptomus客户端
+        
+        Args:
+            api_key: Cryptomus API密钥
+            merchant_uuid: 商户UUID
+            base_url: API基础URL
+        """
+        self.api_key = api_key or settings.CRYPTOMUS_API_KEY
+        self.merchant_uuid = merchant_uuid or settings.CRYPTOMUS_MERCHANT_UUID
+        self.base_url = base_url or settings.CRYPTOMUS_BASE_URL
+        
+        if not self.api_key or not self.merchant_uuid:
+            raise ValueError("CRYPTOMUS_API_KEY and CRYPTOMUS_MERCHANT_UUID must be set")
+        
+        self.session = None
+    
+    async def __aenter__(self):
+        """异步上下文管理器入口"""
+        self.session = aiohttp.ClientSession()
+        return self
+    
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        """异步上下文管理器出口"""
+        if self.session:
+            await self.session.close()
+    
+    def _generate_signature(self, raw_body: bytes, key: str) -> str:
+        """
+        根据 Cryptomus 官方要求对原始请求体做 HMAC-SHA256 签名。
+        - 请求使用 api_key
+        - webhook 验签使用 payout/webhook key（settings.CRYPTOMUS_PAYOUT_KEY）
+        - 必须对原始 body 签名，不能重新排序/序列化
+        """
+        return hmac.new(key.encode("utf-8"), raw_body, hashlib.sha256).hexdigest()
+    
+    async def _make_request(
+        self, 
+        method: str, 
+        endpoint: str, 
+        data: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        """
+        发送HTTP请求到Cryptomus API
+        
+        Args:
+            method: HTTP方法
+            endpoint: API端点
+            data: 请求数据
+            
+        Returns:
+            API响应数据
+            
+        Raises:
+            Exception: 请求失败时抛出异常
+        """
+        url = f"{self.base_url}/{endpoint}"
+        headers = {
+            'Content-Type': 'application/json',
+            'merchant': self.merchant_uuid
+        }
+        
+        # 准备请求数据
+        if data is None:
+            data = {}
+        
+        # 使用原始 JSON 作为签名输入
+        raw_body = json.dumps(data, separators=(',', ':'), ensure_ascii=False).encode("utf-8")
+        headers['sign'] = self._generate_signature(raw_body, self.api_key)
+        
+        # 确保session存在
+        if self.session is None:
+            self.session = aiohttp.ClientSession()
+        
+        try:
+            async with self.session.request(method, url, headers=headers, data=raw_body) as response:
+                response_data = await response.json()
+                
+                # 检查响应状态
+                if response.status != 200:
+                    error_msg = response_data.get('message', 'Unknown error')
+                    logger.error(f"Cryptomus API error: {response.status} - {error_msg}")
+                    raise Exception(f"Cryptomus API error: {error_msg}")
+                
+                # 检查业务状态
+                if response_data.get('state') == 0:
+                    error_msg = response_data.get('message', 'Business logic error')
+                    logger.error(f"Cryptomus business error: {error_msg}")
+                    raise Exception(f"Cryptomus business error: {error_msg}")
+                
+                return response_data
+                
+        except aiohttp.ClientError as e:
+            logger.error(f"Cryptomus API request failed: {str(e)}")
+            raise Exception(f"Network error: {str(e)}")
+        except Exception as e:
+            logger.error(f"Cryptomus API unexpected error: {str(e)}")
+            raise
+    
+    async def create_payment(
+        self,
+        amount: float,
+        currency: str = "USD",
+        order_id: str = None,
+        currency_from: str = "USD",
+        network: str = None,
+        url_callback: str = None,
+        url_success: str = None,
+        is_payment_multiple: bool = False,
+        lifetime: int = 3600,
+        to_currency: str = None
+    ) -> Dict[str, Any]:
+        """
+        创建支付订单
+        
+        Args:
+            amount: 支付金额
+            currency: 货币类型
+            order_id: 订单ID
+            currency_from: 源货币
+            network: 区块链网络
+            url_callback: 回调URL
+            url_success: 成功URL
+            is_payment_multiple: 是否允许多次支付
+            lifetime: 支付有效期（秒）
+            to_currency: 目标货币
+            
+        Returns:
+            支付信息
+        """
+        data = {
+            'amount': str(amount),
+            'currency': currency,
+            'order_id': order_id or f"order_{int(datetime.now().timestamp())}",
+            'currency_from': currency_from,
+            'is_payment_multiple': is_payment_multiple,
+            'lifetime': lifetime
+        }
+        
+        # 添加可选参数
+        if network:
+            data['network'] = network
+        if url_callback:
+            data['url_callback'] = url_callback
+        if url_success:
+            data['url_success'] = url_success
+        if to_currency:
+            data['to_currency'] = to_currency
+        
+        return await self._make_request('POST', 'payment', data)
+    
+    async def get_payment_info(self, payment_id: str = None, order_id: str = None) -> Dict[str, Any]:
+        """
+        获取支付信息
+        
+        Args:
+            payment_id: 支付ID
+            order_id: 订单ID
+            
+        Returns:
+            支付信息
+        """
+        data = {}
+        if payment_id:
+            data['uuid'] = payment_id
+        elif order_id:
+            data['order_id'] = order_id
+        else:
+            raise ValueError("Either payment_id or order_id must be provided")
+        
+        return await self._make_request('POST', 'payment/info', data)
+    
+    async def get_payment_history(
+        self, 
+        page: int = 1,
+        limit: int = 50,
+        order_id: str = None,
+        status: str = None,
+        start_date: str = None,
+        end_date: str = None
+    ) -> Dict[str, Any]:
+        """
+        获取支付历史
+        
+        Args:
+            page: 页码
+            limit: 每页数量
+            order_id: 订单ID
+            status: 支付状态
+            start_date: 开始日期
+            end_date: 结束日期
+            
+        Returns:
+            支付历史列表
+        """
+        data = {
+            'page': page,
+            'limit': limit
+        }
+        
+        # 添加可选参数
+        if order_id:
+            data['order_id'] = order_id
+        if status:
+            data['status'] = status
+        if start_date:
+            data['start_date'] = start_date
+        if end_date:
+            data['end_date'] = end_date
+        
+        return await self._make_request('POST', 'payment/history', data)
+    
+    async def get_balance(self) -> Dict[str, Any]:
+        """
+        获取账户余额
+        
+        Returns:
+            余额信息
+        """
+        return await self._make_request('POST', 'balance', {})
+    
+    async def get_services(self) -> Dict[str, Any]:
+        """
+        获取支持的服务列表
+        
+        Returns:
+            服务列表
+        """
+        return await self._make_request('POST', 'services', {})
+    
+    async def create_static_wallet(
+        self,
+        currency: str,
+        network: str,
+        order_id: str = None,
+        url_callback: str = None
+    ) -> Dict[str, Any]:
+        """
+        创建静态钱包
+        
+        Args:
+            currency: 货币类型
+            network: 网络
+            order_id: 订单ID
+            url_callback: 回调URL
+            
+        Returns:
+            静态钱包信息
+        """
+        data = {
+            'currency': currency,
+            'network': network
+        }
+        
+        if order_id:
+            data['order_id'] = order_id
+        if url_callback:
+            data['url_callback'] = url_callback
+        
+        return await self._make_request('POST', 'wallet/static', data)
+    
+    async def block_static_wallet(self, wallet_uuid: str) -> Dict[str, Any]:
+        """
+        封锁静态钱包
+        
+        Args:
+            wallet_uuid: 钱包UUID
+            
+        Returns:
+            操作结果
+        """
+        data = {'uuid': wallet_uuid}
+        return await self._make_request('POST', 'wallet/block', data)
+    
+    async def refund_payment(
+        self,
+        payment_id: str,
+        amount: float = None,
+        address: str = None,
+        network: str = None
+    ) -> Dict[str, Any]:
+        """
+        退款支付
+        
+        Args:
+            payment_id: 支付ID
+            amount: 退款金额
+            address: 退款地址
+            network: 网络
+            
+        Returns:
+            退款信息
+        """
+        data = {'uuid': payment_id}
+        
+        if amount:
+            data['amount'] = str(amount)
+        if address:
+            data['address'] = address
+        if network:
+            data['network'] = network
+        
+        return await self._make_request('POST', 'payment/refund', data)
+    
+    async def resend_webhook(self, payment_id: str) -> Dict[str, Any]:
+        """
+        重新发送webhook
+        
+        Args:
+            payment_id: 支付ID
+            
+        Returns:
+            操作结果
+        """
+        data = {'uuid': payment_id}
+        return await self._make_request('POST', 'payment/webhook/resend', data)
+    
+    async def test_webhook(self, payment_id: str) -> Dict[str, Any]:
+        """
+        测试webhook
+        
+        Args:
+            payment_id: 支付ID
+            
+        Returns:
+            测试结果
+        """
+        data = {'uuid': payment_id}
+        return await self._make_request('POST', 'payment/webhook/test', data)
+    
+    def verify_webhook_signature(self, raw_body: bytes, signature: str) -> bool:
+        """
+        验证 webhook 签名：使用 payout/webhook key + 原始 body 做 HMAC-SHA256。
+        """
+        try:
+            if not settings.CRYPTOMUS_PAYOUT_KEY:
+                logger.error("CRYPTOMUS_PAYOUT_KEY missing, cannot verify webhook")
+                return False
+            expected_signature = self._generate_signature(raw_body, settings.CRYPTOMUS_PAYOUT_KEY)
+            return hmac.compare_digest(expected_signature, signature)
+        except Exception as e:
+            logger.error(f"Webhook signature verification failed: {str(e)}")
+            return False
+
+
+# 全局客户端实例
+def get_cryptomus_client() -> CryptomusClient:
+    """获取Cryptomus客户端实例"""
+    return CryptomusClient()
+
+
+# 便捷函数
+async def create_cryptomus_payment(
+    amount: float,
+    currency: str = "USD",
+    order_id: str = None,
+    **kwargs
+) -> Dict[str, Any]:
+    """便捷函数：创建Cryptomus支付"""
+    async with get_cryptomus_client() as client:
+        return await client.create_payment(amount, currency, order_id, **kwargs)
+
+
+async def get_cryptomus_payment_info(payment_id: str = None, order_id: str = None) -> Dict[str, Any]:
+    """便捷函数：获取Cryptomus支付信息"""
+    async with get_cryptomus_client() as client:
+        return await client.get_payment_info(payment_id, order_id)
+
+
+async def get_cryptomus_balance() -> Dict[str, Any]:
+    """便捷函数：获取Cryptomus余额"""
+    async with get_cryptomus_client() as client:
+        return await client.get_balance()

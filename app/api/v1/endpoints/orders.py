@@ -11,9 +11,14 @@ from app.schemas.order import (
 )
 from app.services.order_service import OrderService
 from app.services.crypto_payment import crypto_payment_service
+from app.services.cryptomus_client import get_cryptomus_client
 from app.models.order import OrderType, OrderStatus, PaymentMethod, CryptoCurrency
 from app.models.user import User
 from app.api.v1.endpoints.session import get_current_active_user
+import json
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/orders", tags=["orders"], include_in_schema=False)
 
@@ -119,6 +124,118 @@ async def payment_callback(
     return {"message": "Payment confirmed successfully"}
 
 
+@router.post("/payments/cryptomus-webhook")
+async def cryptomus_webhook(
+    request: Request,
+    db: AsyncSession = Depends(get_db)
+):
+    """Cryptomus Webhook回调接口"""
+    try:
+        # 获取请求数据
+        body = await request.body()
+        webhook_data = json.loads(body.decode('utf-8'))
+        
+        # 获取Cryptomus签名
+        signature = request.headers.get("sign")
+        if not signature:
+            logger.warning("Cryptomus webhook missing signature")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Missing signature"
+            )
+        
+        # 验证签名
+        if not crypto_payment_service.verify_webhook_signature(body, signature):
+            logger.warning("Invalid Cryptomus webhook signature")
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Invalid signature"
+            )
+        
+        # 获取支付信息
+        payment_uuid = webhook_data.get('uuid')
+        order_id = webhook_data.get('order_id')
+        payment_status = webhook_data.get('payment_status', 'check')
+        transaction_hash = webhook_data.get('txid')
+        confirmations = webhook_data.get('confirmations', 0)
+        
+        if not payment_uuid and not order_id:
+            logger.error("Cryptomus webhook missing payment identifiers")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Missing payment identifiers"
+            )
+
+        payment_id = payment_uuid or order_id
+
+        # 从DB获取支付记录（强一致校验）
+        payment_record = await OrderService.get_payment_by_id(db, payment_id)
+        if not payment_record:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Payment not found")
+
+        # 基础校验：订单/商户/金额/币种
+        stored_payment = await crypto_payment_service.get_cached_payment(payment_id)
+        if order_id and payment_record.order_id and order_id != (stored_payment or {}).get('order_id', order_id):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Order id mismatch")
+        if settings.CRYPTOMUS_MERCHANT_UUID and webhook_data.get('merchant') and webhook_data.get('merchant') != settings.CRYPTOMUS_MERCHANT_UUID:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid merchant")
+
+        incoming_amount = webhook_data.get('order_amount') or webhook_data.get('amount')
+        if incoming_amount is not None:
+            try:
+                from decimal import Decimal
+                if Decimal(str(payment_record.amount)) != Decimal(str(incoming_amount)):
+                    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Amount mismatch")
+            except Exception:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Amount parse error")
+
+        incoming_currency = webhook_data.get('currency')
+        if incoming_currency and payment_record.crypto_currency and str(incoming_currency).upper() != payment_record.crypto_currency.value:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Currency mismatch")
+        
+        # 转换状态
+        converted_status = crypto_payment_service._convert_cryptomus_status(payment_status)
+
+        # 如果已经是终态且重复通知，直接返回成功（幂等）
+        if stored_payment and crypto_payment_service._is_final_status(stored_payment.get('status', '')) and crypto_payment_service._is_final_status(converted_status) and converted_status == stored_payment.get('status'):
+            return {"status": "success", "detail": "duplicate webhook"}
+        
+        # 更新支付状态
+        await crypto_payment_service.update_payment_status(
+            payment_id=payment_uuid or order_id,
+            status=converted_status,
+            transaction_hash=transaction_hash,
+            confirmations=confirmations
+        )
+        
+        # 如果支付已确认，处理订单
+        if converted_status in ['confirmed', 'paid']:
+            success = await OrderService.confirm_payment(
+                db, payment_uuid or order_id, transaction_hash, confirmations
+            )
+            
+            if success:
+                logger.info(f"Cryptomus payment confirmed: {payment_uuid or order_id}")
+            else:
+                logger.error(f"Failed to confirm Cryptomus payment: {payment_uuid or order_id}")
+        
+        logger.info(f"Cryptomus webhook processed: {payment_uuid or order_id} - {payment_status}")
+        return {"status": "success"}
+        
+    except json.JSONDecodeError as e:
+        logger.error(f"Invalid JSON in Cryptomus webhook: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid JSON"
+        )
+    except Exception as e:
+        logger.error(f"Error processing Cryptomus webhook: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Internal server error"
+        )
+
+
 @router.get("/balance/logs", response_model=list[BalanceLogResponse])
 async def get_balance_logs(
     page: int = Query(1, ge=1),
@@ -173,7 +290,7 @@ async def monitor_payment(
         )
     
     # 获取支付状态
-    payment_status = crypto_payment_service.get_payment_status(payment_id)
+    payment_status = await crypto_payment_service.get_payment_status(payment_id)
     
     return payment_status
 
@@ -225,7 +342,7 @@ async def verify_payment(
         )
     
     payment_response = PaymentResponse.from_orm(payment)
-    crypto_status = crypto_payment_service.get_payment_status(payment_id)
+    crypto_status = await crypto_payment_service.get_payment_status(payment_id)
     
     return {
         "payment": payment_response,
@@ -236,7 +353,7 @@ async def verify_payment(
 @router.get("/crypto/currencies")
 async def get_supported_currencies():
     """获取支持的加密货币列表"""
-    return crypto_payment_service.get_supported_currencies()
+    return await crypto_payment_service.get_supported_currencies()
 
 
 @router.post("/crypto/rates/update")
@@ -244,3 +361,18 @@ async def update_exchange_rates():
     """更新汇率"""
     updated_rates = crypto_payment_service.update_exchange_rates()
     return {"message": "Exchange rates updated", "rates": updated_rates}
+
+
+@router.get("/crypto/balance")
+async def get_crypto_balance():
+    """获取Cryptomus账户余额"""
+    try:
+        if not settings.CRYPTOMUS_API_KEY or not settings.CRYPTOMUS_MERCHANT_UUID:
+            return {"error": "Cryptomus not configured"}
+        
+        async with get_cryptomus_client() as client:
+            balance = await client.get_balance()
+            return balance
+    except Exception as e:
+        logger.error(f"Failed to get Cryptomus balance: {str(e)}")
+        return {"error": str(e)}
