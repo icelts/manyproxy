@@ -172,7 +172,7 @@
                             window.navbarManager.setActiveNavigation('proxy.html');
                             window.navbarManager.rebindEvents();
                         }
-                        if (window.i18n) i18n.updatePage();
+                        if (window.i18n) i18n.applyStoredLanguage();
                     }, 50);
                 })
                 .catch(error => console.error('Failed to load navbar:', error));

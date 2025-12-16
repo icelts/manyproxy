@@ -1,0 +1,199 @@
+Token API
+Account's token
+_iCp27tGi46qKNBKo0TyUArkI-8rPGrkK7BB83SMAts
+Get key's list
+Get key's list
+
+https://mproxy.vn/capi/_iCp27tGi46qKNBKo0TyUArkI-8rPGrkK7BB83SMAts/keys
+Result:
+
+{
+  "status": 1,
+  "code": 1,
+  "message": "Thành công",
+  "data": [
+    {
+      "key_code": "YOUR_KEY_PASS",
+      "user": "cashbag",
+      "server": "ip.mproxy.vn",
+      "server_port": 12345,
+      "proxy": "cashbag:YOUR_KEY_PASS@ip.mproxy.vn:12345",
+      "status": 1,
+      "total_download": 1274329217,
+      "total_upload": 1098998655,
+      "expired_time": "2024-05-03T07:04:31.000Z",
+      "finished": false,
+      "bandwidth_limit": -1,
+      "priority_telco": null,
+      "allow_ip": null
+    }
+  ]
+}
+Get balance
+Get balance
+
+https://mproxy.vn/capi/_iCp27tGi46qKNBKo0TyUArkI-8rPGrkK7BB83SMAts/balance
+Result:
+
+{
+  "status": 1,
+  "code": 1,
+  "message": "Thành công",
+  "data": {
+    "balance": "10000"
+  }
+}
+Reset IP
+Reset IP
+
+https://mproxy.vn/capi/_iCp27tGi46qKNBKo0TyUArkI-8rPGrkK7BB83SMAts/key/YOUR_KEY_PASS/resetIp
+Result:
+
+{
+  "status": 1,
+  "code": 1,
+  "message": "Thành công",
+  "data": {
+    "key_code": "YOUR_KEY_PASS",
+    "user": "cashbag",
+    "server": "ip.mproxy.vn",
+    "server_port": 12345,
+    "proxy": "cashbag:YOUR_KEY_PASS@ip.mproxy.vn:12345",
+    "status": 1,
+    "total_download": 1274329217,
+    "total_upload": 1098998655,
+    "bandwidth_limit": -1,
+    "priority_telco": null,
+    "allow_ip": null
+  }
+}
+Extend key
+Extend key
+
+https://mproxy.vn/capi/_iCp27tGi46qKNBKo0TyUArkI-8rPGrkK7BB83SMAts/key/YOUR_KEY_PASS/extend
+Result:
+
+{
+  "status": 1,
+  "code": 1,
+  "message": "Thành công",
+  "data": {
+    "key_code": "YOUR_KEY_PASS",
+    "user": "cashbag",
+    "server": "ip.mproxy.vn",
+    "server_port": 12345,
+    "proxy": "cashbag:YOUR_KEY_PASS@ip.mproxy.vn:12345",
+    "status": 1,
+    "total_download": 1274329217,
+    "total_upload": 1098998655,
+    "expired_time": "2024-05-03T07:04:31.000Z",
+    "finished": false,
+    "bandwidth_limit": -1,
+    "priority_telco": null,
+    "allow_ip": null
+  }
+}
+Package's list
+Package's list
+
+https://mproxy.vn/capi/_iCp27tGi46qKNBKo0TyUArkI-8rPGrkK7BB83SMAts/packages
+Result:
+
+{
+  "status": 1,
+  "code": 1,
+  "message": "Thanh cong",
+  "data": [
+    {
+      "id": 1,
+      "name": "Dùng thử miễn phí 3 ngày",
+      "desc": "Dùng thử miễn phí trong 3 ngày",
+      "price": 0,
+      "number_day": 3,
+      "status": 1,
+      "bandwidth_limit": 500000000,
+      "quantity_limit": 1
+    }
+  ]
+}
+Buy key
+Buy key
+
+https://mproxy.vn/capi/_iCp27tGi46qKNBKo0TyUArkI-8rPGrkK7BB83SMAts/buy/Package ID
+Result:
+
+{
+  "status": 1,
+  "code": 1,
+  "message": "Thanh cong",
+  "data": {
+    "key_code": "YOUR_KEY_PASS",
+    "user": "cashbag",
+    "server": "ip.mproxy.vn",
+    "server_port": 12345,
+    "proxy": "cashbag:YOUR_KEY_PASS@ip.mproxy.vn:12345",
+    "status": 1,
+    "total_download": 1274329217,
+    "total_upload": 1098998655,
+    "bandwidth_limit": -1,
+    "expired_time": "2024-05-03T07:04:31.000Z",
+    "finished": false,
+    "priority_telco": null,
+    "allow_ip": null
+  }
+}
+Config key
+POST Method
+
+https://mproxy.vn/capi/_iCp27tGi46qKNBKo0TyUArkI-8rPGrkK7BB83SMAts/key/YOUR_KEY_PASS/config
+Result:
+
+{
+  "status": 1,
+  "code": 1,
+  "message": "Thanh cong",
+  "data": {
+    "key_code": "YOUR_KEY_PASS",
+    "user": "cashbag",
+    "server": "ip.mproxy.vn",
+    "server_port": 12345,
+    "proxy": "cashbag:YOUR_KEY_PASS@ip.mproxy.vn:12345",
+    "status": 1,
+    "total_download": 1274329217,
+    "total_upload": 1098998655,
+    "bandwidth_limit": -1,
+    "expired_time": "2024-05-03T07:04:31.000Z",
+    "finished": false,
+    "priority_telco": null,
+    "allow_ip": null,
+    "note": "ghi chú",
+    "key_password": "password bạn muốn đặt"
+  }
+}
+List of fields:
+
+white_list:ip whitelist.(ex:192.168.1.134,192.168.1.156)
+
+port: Port. (ex: 12345)
+
+resetOption: Reset time. (>= 120(ms) ex :120)
+
+priority_telco: Telco code. (ex: VIN,MOB,VTT. Telco's list: VIN,MOB,VTT) 
+
+priority_loc: Location code. (ex:MB,MN.Location's list:MB,MN,MT)
+
+note:Your note.
+
+key_password: Password you want to set (If you do not want to set a password, you can skip this field).
+
+ex:
+
+{
+  "white_list": "192.168.1.134,192.168.1.156",
+  "port": 12340,
+  "resetOption": 120,
+  "priority_telco": "VTT,VIN",
+  "priority_loc": "MB,MT",
+  "note": "test",
+  "key_password": "123456"
+}

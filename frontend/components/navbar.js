@@ -95,9 +95,9 @@ class NavbarManager {
         if (window.i18n) {
             const container = document.getElementById('navbar-container');
             if (container) {
-                i18n.updatePage(container);
+                i18n.applyStoredLanguage(container);
             } else {
-                i18n.updatePage();
+                i18n.applyStoredLanguage();
             }
             this.updateAuthLabels();
         }

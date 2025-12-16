@@ -27,7 +27,7 @@ def get_current_api_user(request: Request) -> int:
     return getattr(user, "id", None) or getattr(request.state, "user_id", None)
 
 
-@public_router.post("/mobile/{order_id}/reset", response_model=ProxyOrderResponse)
+@public_router.post("/mobile/{order_id}/reset", response_model=ProxyOrderResponse, include_in_schema=False)
 async def reset_mobile_proxy(
     order_id: str,
     db: AsyncSession = Depends(get_db),
@@ -41,7 +41,7 @@ async def reset_mobile_proxy(
     )
 
 
-@public_router.post("/mobile/token/{token}/reset", response_model=ProxyOrderResponse)
+@public_router.post("/mobile/token/{token}/reset", response_model=ProxyOrderResponse, include_in_schema=False)
 async def reset_mobile_proxy_by_token(
     token: str,
     db: AsyncSession = Depends(get_db),
@@ -55,7 +55,7 @@ async def reset_mobile_proxy_by_token(
     )
 
 
-@public_router.get("/dynamic/{order_id}")
+@public_router.get("/dynamic/{order_id}", include_in_schema=False)
 async def get_dynamic_proxy(
     order_id: str,
     carrier: str = Query("random", description="运营商"),
@@ -91,7 +91,7 @@ async def get_dynamic_proxy_by_token(
     )
 
 
-@public_router.post("/static/{order_id}/change")
+@public_router.post("/static/{order_id}/change", include_in_schema=False)
 async def change_static_proxy(
     order_id: str,
     target_provider: str = Query(..., description="目标代理类型"),
@@ -107,7 +107,7 @@ async def change_static_proxy(
     )
 
 
-@public_router.post("/static/{order_id}/change-security")
+@public_router.post("/static/{order_id}/change-security", include_in_schema=False)
 async def change_proxy_security(
     order_id: str,
     protocol: str = Query("HTTP", description="协议类型"),
@@ -123,7 +123,7 @@ async def change_proxy_security(
 
 
 # 添加API文档说明
-@public_router.get("/info")
+@public_router.get("/info", include_in_schema=False)
 async def api_info():
     """API服务信息"""
     return {

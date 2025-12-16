@@ -17,6 +17,8 @@ const i18n = {
             'nav.register': '注册',
             'nav.logout': '退出登录',
             'nav.language': '语言',
+            'nav.apiDocs': 'API 文档',
+            'nav.admin': '管理后台',
             'nav.welcome': '用户',
 
             'footer.description': '专业的代理服务平台，为您提供稳定、灵活、安全的全球代理资源。',
@@ -27,6 +29,7 @@ const i18n = {
             'footer.apiDocs': 'API 文档',
             'footer.privacy': '隐私政策',
             'footer.terms': '服务条款',
+            'footer.contact': '联系我们',
             'footer.contactTitle': '联系我们',
             'footer.rights': '© 2024 ManyProxy. 保留所有权利。',
 
@@ -106,6 +109,12 @@ const i18n = {
             'products.tabs.static': '<i class="fas fa-desktop"></i> 静态代理',
             'products.tabs.dynamic': '<i class="fas fa-sync"></i> 动态代理',
             'products.tabs.mobile': '<i class="fas fa-mobile-alt"></i> 移动代理',
+            'products.static.title': '静态代理',
+            'products.static.desc': '固定IP地址，适合长期稳定使用',
+            'products.dynamic.title': '动态代理',
+            'products.dynamic.desc': '自动轮换IP，适合爬虫和数据采集',
+            'products.mobile.title': '移动代理',
+            'products.mobile.desc': '真实移动网络IP，支持4G/5G网络',
             'products.loading': '正在加载产品...',
             'products.modalTitle': '确认购买',
             'products.modalCancel': '取消',
@@ -164,6 +173,7 @@ const i18n = {
             'proxy.table.created': '创建时间',
             'proxy.table.expires': '到期时间',
             'proxy.table.status': '状态',
+            'proxy.table.actions': '操作',
             'proxy.table.token': '产品 Token',
             'proxy.table.server': '服务节点',
             'proxy.apiGuide.title': 'API 使用说明',
@@ -276,6 +286,8 @@ const i18n = {
             'nav.register': 'Register',
             'nav.logout': 'Logout',
             'nav.language': 'Language',
+            'nav.apiDocs': 'API Docs',
+            'nav.admin': 'Admin Panel',
             'nav.welcome': 'User',
 
             'footer.description': 'Professional proxy platform delivering stable, flexible and secure global resources.',
@@ -286,6 +298,7 @@ const i18n = {
             'footer.apiDocs': 'API Documentation',
             'footer.privacy': 'Privacy Policy',
             'footer.terms': 'Terms of Service',
+            'footer.contact': 'Contact Us',
             'footer.contactTitle': 'Contact Us',
             'footer.rights': '© 2024 ManyProxy. All rights reserved.',
 
@@ -365,6 +378,12 @@ const i18n = {
             'products.tabs.static': '<i class="fas fa-desktop"></i> Static Proxies',
             'products.tabs.dynamic': '<i class="fas fa-sync"></i> Dynamic Proxies',
             'products.tabs.mobile': '<i class="fas fa-mobile-alt"></i> Mobile Proxies',
+            'products.static.title': 'Static Proxies',
+            'products.static.desc': 'Fixed IP addresses ideal for long-term stable workloads',
+            'products.dynamic.title': 'Rotating Proxies',
+            'products.dynamic.desc': 'Auto-rotating IPs built for crawlers and data collection',
+            'products.mobile.title': 'Mobile Proxies',
+            'products.mobile.desc': 'Real mobile network IPs with full 4G/5G support',
             'products.loading': 'Loading products...',
             'products.modalTitle': 'Confirm Purchase',
             'products.modalCancel': 'Cancel',
@@ -423,6 +442,7 @@ const i18n = {
             'proxy.table.created': 'Created',
             'proxy.table.expires': 'Expires',
             'proxy.table.status': 'Status',
+            'proxy.table.actions': 'Actions',
             'proxy.table.token': 'Product Token',
             'proxy.table.server': 'Server',
             'proxy.apiGuide.title': 'API Usage',
@@ -565,6 +585,18 @@ const i18n = {
         this.updatePage();
     },
 
+    applyStoredLanguage(root = document) {
+        const stored = localStorage.getItem('language');
+        const normalized = this.normalizeLang(stored);
+        if (stored !== normalized) {
+            localStorage.setItem('language', normalized);
+        }
+        if (this.currentLang !== normalized) {
+            this.currentLang = normalized;
+        }
+        this.updatePage(root);
+    },
+
     updatePage(root = document) {
         root.querySelectorAll('[data-i18n]').forEach(element => {
             const key = element.getAttribute('data-i18n');
@@ -589,7 +621,7 @@ const i18n = {
 i18n.init();
 
 document.addEventListener('DOMContentLoaded', () => {
-    i18n.updatePage();
+    i18n.applyStoredLanguage();
     document.addEventListener('click', (event) => {
         const trigger = event.target.closest('.lang-switcher');
         if (!trigger) return;

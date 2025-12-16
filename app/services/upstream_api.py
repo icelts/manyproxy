@@ -443,7 +443,27 @@ class MobileProxyService(UpstreamAPIService):
         """购买移动代理"""
         url = f"{cls.BASE_URL}/{cls.TOKEN}/buy/{package_id}"
         
-        return await cls._make_request("POST", url)
+        # 添加调试日志
+        logger.info(f"购买移动代理URL: {url}")
+        
+        # 根据API文档，购买接口使用GET方法
+        try:
+            result = await cls._make_request("GET", url)
+            logger.info(f"移动代理购买响应: {result}")
+            
+            # 检查API响应状态
+            if isinstance(result, dict) and result.get('status') == 1:
+                return result
+            else:
+                logger.error(f"移动代理购买失败: {result}")
+                raise Exception(f"API返回错误状态: {result}")
+                
+        except httpx.HTTPStatusError as e:
+            logger.error(f"移动代理购买HTTP错误: {e}")
+            raise
+        except Exception as e:
+            logger.error(f"移动代理购买失败: {e}")
+            raise
     
     @classmethod
     async def get_keys(cls) -> Dict[str, Any]:
@@ -464,4 +484,40 @@ class MobileProxyService(UpstreamAPIService):
         """续费密钥"""
         url = f"{cls.BASE_URL}/{cls.TOKEN}/key/{key_code}/extend"
         
-        return await cls._make_request("POST", url)
+        # 添加调试日志
+        logger.info(f"续费移动代理URL: {url}")
+        
+        # 根据API文档，续费接口可能使用POST方法
+        try:
+            result = await cls._make_request("POST", url)
+            logger.info(f"移动代理续费响应: {result}")
+            
+            # 检查API响应状态
+            if isinstance(result, dict) and result.get('status') == 1:
+                return result
+            else:
+                logger.error(f"移动代理续费失败: {result}")
+                raise Exception(f"API返回错误状态: {result}")
+                
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 404:
+                # 尝试GET方法
+                logger.warning(f"POST续费URL返回404，尝试GET方法...")
+                try:
+                    result = await cls._make_request("GET", url)
+                    logger.info(f"移动代理续费GET响应: {result}")
+                    
+                    if isinstance(result, dict) and result.get('status') == 1:
+                        return result
+                    else:
+                        logger.error(f"移动代理续费GET失败: {result}")
+                        raise Exception(f"API返回错误状态: {result}")
+                except Exception as get_e:
+                    logger.error(f"GET续费也失败: {get_e}")
+                    raise e
+            else:
+                logger.error(f"移动代理续费HTTP错误: {e}")
+                raise
+        except Exception as e:
+            logger.error(f"移动代理续费失败: {e}")
+            raise

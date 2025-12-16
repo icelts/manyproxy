@@ -348,7 +348,7 @@
         // 语言切换功能
         document.addEventListener('DOMContentLoaded', function() {
             // 初始化国际化
-            i18n.updatePage();
+            i18n.applyStoredLanguage();
             
             // 语言切换事件
             document.querySelectorAll('.lang-switcher').forEach(btn => {

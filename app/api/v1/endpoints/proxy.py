@@ -82,7 +82,7 @@ async def get_proxy_list(
     return await ProxyService.get_user_proxies(db, user_id, category, page, size)
 
 
-@router.get("/dynamic/{order_id}")
+@router.get("/dynamic/{order_id}", include_in_schema=False)
 async def get_dynamic_proxy(
     order_id: str,
     carrier: str = Query("random", description="运营商"),
@@ -118,7 +118,7 @@ async def get_dynamic_proxy_by_token(
     )
 
 
-@router.post("/mobile/{order_id}/reset")
+@router.post("/mobile/{order_id}/reset", include_in_schema=False)
 async def reset_mobile_proxy(
     order_id: str,
     db: AsyncSession = Depends(get_db),
@@ -132,7 +132,7 @@ async def reset_mobile_proxy(
     )
 
 
-@router.post("/mobile/token/{token}/reset")
+@router.post("/mobile/token/{token}/reset", include_in_schema=False)
 async def reset_mobile_proxy_by_token(
     token: str,
     db: AsyncSession = Depends(get_db),
@@ -146,6 +146,24 @@ async def reset_mobile_proxy_by_token(
     )
 
 
+@router.post("/mobile/{order_id}/renew", include_in_schema=False)
+async def renew_mobile_proxy(
+    order_id: str,
+    db: AsyncSession = Depends(get_db),
+    user_id: int = Depends(get_current_api_user)):
+    """续费移动代理（按原套餐时长自动续费）"""
+    return await ProxyService.renew_mobile_proxy_auto(db, user_id, order_id=order_id)
+
+
+@router.post("/mobile/token/{token}/renew", include_in_schema=False)
+async def renew_mobile_proxy_by_token(
+    token: str,
+    db: AsyncSession = Depends(get_db),
+    user_id: int = Depends(get_current_api_user)):
+    """通过上游token续费移动代理"""
+    return await ProxyService.renew_mobile_proxy_auto(db, user_id, token=token)
+
+
 @router.get("/stats", response_model=ProxyStatsResponse, include_in_schema=False)
 async def get_proxy_stats(db: AsyncSession = Depends(get_db),
     user_id: int = Depends(get_current_api_user)):
@@ -154,7 +172,7 @@ async def get_proxy_stats(db: AsyncSession = Depends(get_db),
 
 
 # 新增静态代理管理端点
-@router.post("/static/{order_id}/change")
+@router.post("/static/{order_id}/change", include_in_schema=False)
 async def change_static_proxy(
     order_id: str,
     target_provider: str = Query(..., description="目标代理类型"),
@@ -169,7 +187,7 @@ async def change_static_proxy(
     )
 
 
-@router.post("/static/{order_id}/change-security")
+@router.post("/static/{order_id}/change-security", include_in_schema=False)
 async def change_proxy_security(
     order_id: str,
     protocol: str = Query("HTTP", description="协议类型"),

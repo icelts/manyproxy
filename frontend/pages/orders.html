@@ -142,7 +142,7 @@
                             window.navbarManager.rebindEvents();
                         }
                         ordersPage.init();
-                        if (window.i18n) i18n.updatePage();
+                        if (window.i18n) i18n.applyStoredLanguage();
                     }, 100);
                 })
                 .catch((error) => {

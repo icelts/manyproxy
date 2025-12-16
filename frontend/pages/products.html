@@ -125,7 +125,7 @@
                             window.navbarManager.rebindEvents();
                         }
                         await productManager.init();
-                        if (window.i18n) i18n.updatePage();
+                        if (window.i18n) i18n.applyStoredLanguage();
                     }, 100);
                 })
                 .catch((error) => {

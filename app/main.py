@@ -275,13 +275,13 @@ async def general_exception_handler(request: Request, exc: Exception):
     return JSONResponse(status_code=500, content={"detail": "Internal server error"})
 
 
-@app.get("/health")
+@app.get("/health", include_in_schema=False)
 async def health_check():
     """Health check."""
     return {"status": "healthy", "version": settings.VERSION, "timestamp": time.time()}
 
 
-@app.get("/")
+@app.get("/", include_in_schema=False)
 async def root():
     """Root endpoint - returns the homepage."""
     from fastapi.responses import FileResponse

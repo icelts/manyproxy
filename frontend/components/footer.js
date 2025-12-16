@@ -24,7 +24,7 @@
             .then((html) => {
                 container.innerHTML = html;
                 if (window.i18n) {
-                    i18n.updatePage(container);
+                    i18n.applyStoredLanguage(container);
                 }
             })
             .catch((error) => {
