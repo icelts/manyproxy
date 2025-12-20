@@ -20,10 +20,10 @@ from app.schemas.proxy import (
 )
 from app.models.proxy import UpstreamProvider, ProductMapping
 from app.api.v1.endpoints.session import get_current_admin_user
-from app.schemas.user import UserResponse
+from app.schemas.user import UserResponse, AdminBalanceAdjustRequest
 from app.services.order_service import OrderService
 from app.models.user import User
-from app.models.order import Order, Payment, OrderType, OrderStatus
+from app.models.order import BalanceLog, Order, Payment, OrderType, OrderStatus
 from app.models.proxy import ProxyProduct
 
 router = APIRouter(prefix="/admin", tags=["admin"], include_in_schema=False)
@@ -106,8 +106,7 @@ async def toggle_user_status(
 @router.post("/users/{user_id}/adjust-balance")
 async def adjust_user_balance(
     user_id: int,
-    amount: Decimal,
-    description: str,
+    adjust_data: AdminBalanceAdjustRequest,
     db: AsyncSession = Depends(get_db),
     admin_user: User = Depends(get_current_admin_user)
 ):
@@ -122,28 +121,59 @@ async def adjust_user_balance(
             detail="User not found"
         )
     
+    amount = adjust_data.amount
+    description = adjust_data.description.strip()
+    if amount == 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="amount must not be 0"
+        )
+
     balance_before = user.balance
     balance_after = balance_before + amount
-    
+
     user.balance = balance_after
-    await db.commit()
-    
+
+    # 正向调整：创建一笔“管理员充值”订单，让用户在充值历史中可见
+    related_order_id = None
+    if amount > 0:
+        now = datetime.utcnow()
+        order = Order(
+            order_number=await OrderService.generate_order_number(),
+            user_id=user_id,
+            type=OrderType.RECHARGE,
+            amount=amount,
+            status=OrderStatus.COMPLETED,
+            description=f"管理员充值：{description}",
+            paid_at=now,
+            completed_at=now,
+            credited_at=now,
+        )
+        db.add(order)
+        await db.flush()
+        related_order_id = order.id
+
     # 创建余额变动日志
-    from app.schemas.order import BalanceLogCreate
-    log_data = BalanceLogCreate(
+    balance_log = BalanceLog(
+        user_id=user_id,
         type="admin_adjust",
         amount=amount,
         balance_before=balance_before,
         balance_after=balance_after,
-        description=description
+        description=description,
+        related_order_id=related_order_id,
+        admin_id=admin_user.id,
     )
-    await OrderService.create_balance_log(db, user_id, log_data, admin_user.id)
+    db.add(balance_log)
+
+    await db.commit()
     
     return {
         "message": "Balance adjusted successfully",
         "balance_before": balance_before,
         "balance_after": balance_after,
-        "adjustment": amount
+        "adjustment": amount,
+        "related_order_id": related_order_id,
     }
 
 

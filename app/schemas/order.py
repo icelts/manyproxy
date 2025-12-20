@@ -142,6 +142,7 @@ class RechargeRequest(BaseModel):
     amount: Decimal = Field(gt=0, description="充值金额必须大于0")
     method: PaymentMethod = PaymentMethod.CRYPTO
     crypto_currency: Optional[CryptoCurrency] = None
+    crypto_network: Optional[str] = None
 
 
 class RechargeResponse(BaseModel):

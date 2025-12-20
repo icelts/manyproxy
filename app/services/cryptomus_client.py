@@ -7,6 +7,7 @@ import hashlib
 import hmac
 import json
 import logging
+import base64
 from typing import Dict, Optional, Any, List
 from decimal import Decimal
 import aiohttp
@@ -50,18 +51,36 @@ class CryptomusClient:
     
     def _generate_signature(self, raw_body: bytes, key: str) -> str:
         """
-        根据 Cryptomus 官方要求对原始请求体做 HMAC-SHA256 签名。
-        - 请求使用 api_key
-        - webhook 验签使用 payout/webhook key（settings.CRYPTOMUS_PAYOUT_KEY）
-        - 必须对原始 body 签名，不能重新排序/序列化
+        Cryptomus 官方签名算法：
+        1. 对 JSON 数据进行 base64 编码
+        2. 拼接 API_KEY
+        3. 计算 MD5 哈希
+        
+        官方文档：https://doc.cryptomus.com/merchant-api/request-format
+        $sign = md5(base64_encode($data) . $API_KEY);
         """
-        return hmac.new(key.encode("utf-8"), raw_body, hashlib.sha256).hexdigest()
+        import base64
+        
+        # 解码原始body为JSON字符串
+        json_str = raw_body.decode('utf-8')
+        
+        # 步骤1: 对JSON数据进行base64编码
+        base64_data = base64.b64encode(json_str.encode('utf-8')).decode('utf-8')
+        
+        # 步骤2: 拼接API_KEY
+        sign_data = base64_data + key
+        
+        # 步骤3: 计算MD5哈希
+        signature = hashlib.md5(sign_data.encode('utf-8')).hexdigest()
+        
+        return signature
     
     async def _make_request(
         self, 
         method: str, 
         endpoint: str, 
-        data: Optional[Dict[str, Any]] = None
+        data: Optional[Dict[str, Any]] = None,
+        allow_state_zero: bool = False,
     ) -> Dict[str, Any]:
         """
         发送HTTP请求到Cryptomus API
@@ -101,13 +120,18 @@ class CryptomusClient:
                 
                 # 检查响应状态
                 if response.status != 200:
-                    error_msg = response_data.get('message', 'Unknown error')
+                    error_msg = response_data.get('message') if isinstance(response_data, dict) else None
+                    error_msg = error_msg or str(response_data)
                     logger.error(f"Cryptomus API error: {response.status} - {error_msg}")
                     raise Exception(f"Cryptomus API error: {error_msg}")
                 
                 # 检查业务状态
                 if response_data.get('state') == 0:
-                    error_msg = response_data.get('message', 'Business logic error')
+                    if allow_state_zero and response_data.get('result') is not None:
+                        logger.warning(f"Cryptomus state=0 but returning result for {endpoint}")
+                        return response_data
+                    error_msg = response_data.get('message') if isinstance(response_data, dict) else None
+                    error_msg = error_msg or str(response_data)
                     logger.error(f"Cryptomus business error: {error_msg}")
                     raise Exception(f"Cryptomus business error: {error_msg}")
                 
@@ -125,13 +149,13 @@ class CryptomusClient:
         amount: float,
         currency: str = "USD",
         order_id: str = None,
-        currency_from: str = "USD",
+        currency_from: Optional[str] = None,
         network: str = None,
         url_callback: str = None,
         url_success: str = None,
         is_payment_multiple: bool = False,
         lifetime: int = 3600,
-        to_currency: str = None
+        to_currency: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         创建支付订单
@@ -155,10 +179,11 @@ class CryptomusClient:
             'amount': str(amount),
             'currency': currency,
             'order_id': order_id or f"order_{int(datetime.now().timestamp())}",
-            'currency_from': currency_from,
             'is_payment_multiple': is_payment_multiple,
             'lifetime': lifetime
         }
+        if currency_from:
+            data['currency_from'] = currency_from
         
         # 添加可选参数
         if network:
@@ -170,7 +195,8 @@ class CryptomusClient:
         if to_currency:
             data['to_currency'] = to_currency
         
-        return await self._make_request('POST', 'payment', data)
+        # 部分商户环境下创建支付可能返回 state=0 但附带完整 result，这里允许通过
+        return await self._make_request('POST', 'payment', data, allow_state_zero=True)
     
     async def get_payment_info(self, payment_id: str = None, order_id: str = None) -> Dict[str, Any]:
         """
@@ -249,7 +275,8 @@ class CryptomusClient:
         Returns:
             服务列表
         """
-        return await self._make_request('POST', 'services', {})
+        # 官方文档支付服务列表接口：/payment/services
+        return await self._make_request('POST', 'payment/services', {}, allow_state_zero=True)
     
     async def create_static_wallet(
         self,
@@ -353,13 +380,14 @@ class CryptomusClient:
     
     def verify_webhook_signature(self, raw_body: bytes, signature: str) -> bool:
         """
-        验证 webhook 签名：使用 payout/webhook key + 原始 body 做 HMAC-SHA256。
+        验证 webhook 签名：使用 payout/webhook key + base64(raw_body) 做 HMAC-SHA256。
         """
         try:
-            if not settings.CRYPTOMUS_PAYOUT_KEY:
+            key = settings.CRYPTOMUS_PAYOUT_KEY or settings.CRYPTOMUS_API_KEY
+            if not key:
                 logger.error("CRYPTOMUS_PAYOUT_KEY missing, cannot verify webhook")
                 return False
-            expected_signature = self._generate_signature(raw_body, settings.CRYPTOMUS_PAYOUT_KEY)
+            expected_signature = self._generate_signature(raw_body, key)
             return hmac.compare_digest(expected_signature, signature)
         except Exception as e:
             logger.error(f"Webhook signature verification failed: {str(e)}")

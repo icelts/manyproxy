@@ -62,15 +62,34 @@ async def recharge_balance(
     current_user: User = Depends(get_current_active_user),
 ):
     """用户充值"""
-    if recharge_data.method == PaymentMethod.CRYPTO and not recharge_data.crypto_currency:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="crypto_currency is required for crypto payments"
+    if recharge_data.method == PaymentMethod.CRYPTO:
+        if not recharge_data.crypto_currency:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="crypto_currency is required for crypto payments"
+            )
+        # 如果前端未传网络，使用允许列表的第一个作为默认
+        if not recharge_data.crypto_network:
+            try:
+                default_network = next(iter(crypto_payment_service.allowed_networks))
+            except StopIteration:
+                default_network = None
+            if not default_network:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="crypto_network is required for crypto payments"
+                )
+            recharge_data.crypto_network = default_network
+    try:
+        return await OrderService.recharge_balance(
+            db, current_user.id, recharge_data.amount, recharge_data.method, recharge_data.crypto_currency, recharge_data.crypto_network
         )
-    
-    return await OrderService.recharge_balance(
-        db, current_user.id, recharge_data.amount, recharge_data.method, recharge_data.crypto_currency
-    )
+    except RuntimeError as e:
+        # 常见：未配置Cryptomus等支付环境
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except Exception as e:
+        logger.error(f"Recharge failed: {e}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Internal server error")
 
 
 @router.get("/payments/{payment_id}", response_model=PaymentResponse)
@@ -104,7 +123,7 @@ async def payment_callback(
             detail="Invalid callback token"
         )
     
-    crypto_payment_service.update_payment_status(
+    await crypto_payment_service.update_payment_status(
         payment_id=callback_data.payment_id,
         status=callback_data.status,
         transaction_hash=callback_data.transaction_hash,
@@ -166,15 +185,30 @@ async def cryptomus_webhook(
                 detail="Missing payment identifiers"
             )
 
-        payment_id = payment_uuid or order_id
+        resolved_payment_id = order_id
+        if not resolved_payment_id and payment_uuid:
+            try:
+                async with get_cryptomus_client() as client:
+                    info = await client.get_payment_info(payment_id=payment_uuid)
+                resolved_payment_id = (info.get('result') or {}).get('order_id')
+            except Exception as lookup_error:
+                logger.warning(
+                    "Failed to resolve Cryptomus order_id for uuid %s: %s",
+                    payment_uuid,
+                    lookup_error,
+                )
+        if not resolved_payment_id:
+            resolved_payment_id = payment_uuid
+        if not resolved_payment_id:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing payment identifier")
 
         # 从DB获取支付记录（强一致校验）
-        payment_record = await OrderService.get_payment_by_id(db, payment_id)
+        payment_record = await OrderService.get_payment_by_id(db, resolved_payment_id)
         if not payment_record:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Payment not found")
 
         # 基础校验：订单/商户/金额/币种
-        stored_payment = await crypto_payment_service.get_cached_payment(payment_id)
+        stored_payment = await crypto_payment_service.get_cached_payment(resolved_payment_id)
         if order_id and payment_record.order_id and order_id != (stored_payment or {}).get('order_id', order_id):
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Order id mismatch")
         if settings.CRYPTOMUS_MERCHANT_UUID and webhook_data.get('merchant') and webhook_data.get('merchant') != settings.CRYPTOMUS_MERCHANT_UUID:
@@ -202,7 +236,7 @@ async def cryptomus_webhook(
         
         # 更新支付状态
         await crypto_payment_service.update_payment_status(
-            payment_id=payment_uuid or order_id,
+            payment_id=resolved_payment_id,
             status=converted_status,
             transaction_hash=transaction_hash,
             confirmations=confirmations
@@ -211,15 +245,15 @@ async def cryptomus_webhook(
         # 如果支付已确认，处理订单
         if converted_status in ['confirmed', 'paid']:
             success = await OrderService.confirm_payment(
-                db, payment_uuid or order_id, transaction_hash, confirmations
+                db, resolved_payment_id, transaction_hash, confirmations
             )
-            
+
             if success:
-                logger.info(f"Cryptomus payment confirmed: {payment_uuid or order_id}")
+                logger.info(f"Cryptomus payment confirmed: {resolved_payment_id}")
             else:
-                logger.error(f"Failed to confirm Cryptomus payment: {payment_uuid or order_id}")
-        
-        logger.info(f"Cryptomus webhook processed: {payment_uuid or order_id} - {payment_status}")
+                logger.error(f"Failed to confirm Cryptomus payment: {resolved_payment_id}")
+
+        logger.info(f"Cryptomus webhook processed: {resolved_payment_id} - {payment_status}")
         return {"status": "success"}
         
     except json.JSONDecodeError as e:

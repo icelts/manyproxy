@@ -1,6 +1,7 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 from typing import Optional
 from datetime import datetime
+from decimal import Decimal
 
 
 class UserBase(BaseModel):
@@ -78,3 +79,8 @@ class APIKeyRotate(BaseModel):
 class PasswordChange(BaseModel):
     current_password: str
     new_password: str
+
+
+class AdminBalanceAdjustRequest(BaseModel):
+    amount: Decimal = Field(description="正数为增加，负数为减少")
+    description: str = Field(min_length=1, description="调整原因/备注")

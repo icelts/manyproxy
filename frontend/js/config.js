@@ -94,7 +94,8 @@
                     : "";
 
             this.api = {
-                baseURL: origin ? `${origin}/api/v1` : "/api/v1",
+                // baseURL 仅站点根，具体端点在 api.js 里带 /api/v1 前缀
+                baseURL: origin || "",
                 timeout: 30000,
                 retryCount: 3,
             };

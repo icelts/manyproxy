@@ -9,6 +9,23 @@ class API {
         this.apiKey = storedApiKey || null;
     }
 
+    normalizeEndpoint(endpoint) {
+        if (typeof endpoint !== 'string' || endpoint.length === 0) return endpoint;
+        if (endpoint.startsWith('http://') || endpoint.startsWith('https://')) return endpoint;
+        if (endpoint.startsWith('/api/v1')) return endpoint;
+
+        const queryIndex = endpoint.indexOf('?');
+        const path = queryIndex >= 0 ? endpoint.slice(0, queryIndex) : endpoint;
+        const query = queryIndex >= 0 ? endpoint.slice(queryIndex) : '';
+
+        const apiPrefixes = ['/session', '/proxy', '/orders', '/admin', '/health'];
+        if (apiPrefixes.some((prefix) => path.startsWith(prefix))) {
+            return `/api/v1${path}${query}`;
+        }
+
+        return endpoint;
+    }
+
     // 设置认证令牌
     setToken(token) {
         this.token = token;
@@ -51,7 +68,10 @@ class API {
 
     // 通用请求方法
     async request(endpoint, options = {}) {
-        const url = `${this.baseURL}${endpoint}`;
+        const normalizedEndpoint = this.normalizeEndpoint(endpoint);
+        const url = normalizedEndpoint.startsWith('http')
+            ? normalizedEndpoint
+            : `${this.baseURL}${normalizedEndpoint}`;
         const requestConfig = {
             headers: {
                 'Content-Type': 'application/json',
@@ -60,8 +80,12 @@ class API {
             ...options
         };
 
-        const requiresApiKey = endpoint.startsWith('/proxy');
-        const isSessionStateEndpoint = endpoint.startsWith('/session/state');
+        const pathOnly = (normalizedEndpoint || '').split('?')[0];
+        const requiresApiKey =
+            pathOnly.startsWith('/api/v1/proxy') || pathOnly.startsWith('/proxy');
+        const isSessionStateEndpoint =
+            pathOnly.startsWith('/api/v1/session/state') ||
+            pathOnly.startsWith('/session/state');
         if (requiresApiKey && !this.apiKey) {
             const apiKeyError = new Error('需要 API Key 才能调用代理接口，请先在个人资料页创建。');
             apiKeyError.code = 'API_KEY_REQUIRED';
@@ -160,81 +184,81 @@ class API {
 
     // 认证相关API
     async login(username, password) {
-        const data = await this.post('/session/login', { username, password });
+        const data = await this.post('/api/v1/session/login', { username, password });
         this.setToken(data.token);
         return data;
     }
 
     async register(userData) {
-        const data = await this.post('/session/register', userData);
+        const data = await this.post('/api/v1/session/register', userData);
         this.setToken(data.token);
         return data;
     }
 
     async createApiKey(name, rateLimit) {
-        return this.post('/session/api-keys', { name, rate_limit: rateLimit });
+        return this.post('/api/v1/session/api-keys', { name, rate_limit: rateLimit });
     }
 
     async getApiKeys() {
-        return this.get('/session/api-keys');
+        return this.get('/api/v1/session/api-keys');
     }
 
     async rotateApiKey(keyId) {
-        return this.put(`/session/api-keys/${keyId}`);
+        return this.put(`/api/v1/session/api-keys/${keyId}`);
     }
 
     async deleteApiKey(keyId) {
-        return this.delete(`/session/api-keys/${keyId}`);
+        return this.delete(`/api/v1/session/api-keys/${keyId}`);
     }
 
     // 代理相关API
     async getProxyProducts() {
-        return this.get('/proxy/products');
+        return this.get('/api/v1/proxy/products');
     }
 
     async buyStaticProxy(provider, quantity) {
-        return this.post('/proxy/static/buy', { provider, quantity });
+        return this.post('/api/v1/proxy/static/buy', { provider, quantity });
     }
 
     async buyDynamicProxy(packageType, quantity) {
-        return this.post('/proxy/dynamic/buy', { 
+        return this.post('/api/v1/proxy/dynamic/buy', { 
             package_type: packageType, 
             quantity 
         });
     }
 
     async buyMobileProxy(provider, quantity) {
-        return this.post('/proxy/mobile/buy', { provider, quantity });
+        return this.post('/api/v1/proxy/mobile/buy', { provider, quantity });
     }
 
     async getProxyList() {
-        return this.get('/proxy/list');
+        return this.get('/api/v1/proxy/list');
     }
 
     async getDynamicProxy(orderId) {
-        return this.get(`/proxy/dynamic/${orderId}`);
+        return this.get(`/api/v1/proxy/dynamic/${orderId}`);
     }
 
     async getDynamicProxyByToken(token, carrier = 'random', province = '0') {
         const params = new URLSearchParams({ carrier, province });
-        return this.get(`/proxy/dynamic/token/${token}?${params.toString()}`);
+        return this.get(`/api/v1/proxy/dynamic/token/${token}?${params.toString()}`);
     }
 
     async resetMobileProxy(orderId) {
-        return this.post(`/proxy/mobile/${orderId}/reset`);
+        return this.post(`/api/v1/proxy/mobile/${orderId}/reset`);
     }
 
     async resetMobileProxyByToken(token) {
-        return this.post(`/proxy/mobile/token/${token}/reset`);
+        return this.post(`/api/v1/proxy/mobile/token/${token}/reset`);
     }
 
     async getProxyStats() {
-        return this.get('/proxy/stats');
+        return this.get('/api/v1/proxy/stats');
     }
 
     // 新增静态代理管理API
     async getSupportedProviders() {
-        return this.get('/proxy/static/providers');
+        return this.get('/api/v1/proxy/static/providers');
     }
 
     async changeStaticProxy(orderId, targetProvider, protocol = 'HTTP', username = 'random', password = 'random') {
@@ -244,7 +268,7 @@ class API {
             username: username,
             password: password
         });
-        return this.post(`/proxy/static/${orderId}/change?${params}`);
+        return this.post(`/api/v1/proxy/static/${orderId}/change?${params}`);
     }
 
     async changeProxySecurity(orderId, protocol = 'HTTP', username = 'random', password = 'random') {
@@ -253,23 +277,23 @@ class API {
             username: username,
             password: password
         });
-        return this.post(`/proxy/static/${orderId}/change-security?${params}`);
+        return this.post(`/api/v1/proxy/static/${orderId}/change-security?${params}`);
     }
 
     async renewStaticProxy(orderId, days) {
         const params = new URLSearchParams({ days: days.toString() });
-        return this.post(`/proxy/static/${orderId}/renew?${params}`);
+        return this.post(`/api/v1/proxy/static/${orderId}/renew?${params}`);
     }
 
     async getUpstreamProxyList(provider, proxyId = null) {
         const params = new URLSearchParams({ provider: provider });
         if (proxyId) params.append('proxy_id', proxyId);
-        return this.get(`/proxy/static/upstream-list?${params}`);
+        return this.get(`/api/v1/proxy/static/upstream-list?${params}`);
     }
 
     // 获取用户信息
     async getSessionState() {
-        return this.get('/session/state');
+        return this.get('/api/v1/session/state');
     }
 
     async getUserInfo() {
@@ -279,7 +303,7 @@ class API {
 
     // 健康检查
     async healthCheck() {
-        return this.get('/health');
+        return this.get('/api/v1/health');
     }
 }
 

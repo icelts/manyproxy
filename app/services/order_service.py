@@ -277,7 +277,8 @@ class OrderService:
         user_id: int,
         amount: Decimal,
         payment_method: PaymentMethod,
-        crypto_currency: Optional[CryptoCurrency] = None
+        crypto_currency: Optional[CryptoCurrency] = None,
+        crypto_network: Optional[str] = None
     ) -> RechargeResponse:
         """用户充值"""
         # 创建充值订单
@@ -290,12 +291,15 @@ class OrderService:
         
         # 如果是加密货币支付，使用支付服务
         if payment_method == PaymentMethod.CRYPTO and crypto_currency:
+            if not crypto_network:
+                raise ValueError("crypto_network is required for crypto payments")
             # 预先生成支付ID，确保链路一致
             payment_identifier = await OrderService.generate_payment_id()
             crypto_payment = await crypto_payment_service.create_payment(
                 float(amount),
                 crypto_currency.value,
-                payment_id=payment_identifier
+                payment_id=payment_identifier,
+                network=crypto_network
             )
             
             payment_data = PaymentCreate(
@@ -315,7 +319,8 @@ class OrderService:
                 payment_id_override=payment_identifier
             )
             
-            qr_code = crypto_payment_service.generate_qr_code(
+            # 优先使用 Cryptomus 返回的二维码数据，缺省再本地生成
+            qr_code = crypto_payment.get('address_qr_code') or crypto_payment_service.generate_qr_code(
                 crypto_payment['payment_id'],
                 crypto_payment['wallet_address'],
                 crypto_payment['crypto_amount'],
@@ -355,59 +360,111 @@ class OrderService:
         confirmations: int
     ) -> bool:
         """确认支付"""
-        payment = await OrderService.get_payment_by_id(db, payment_id)
-        if not payment:
-            return False
-        
-        # 检查确认数是否足够
-        status = "confirmed" if confirmations >= payment.required_confirmations else "pending"
-        await crypto_payment_service.update_payment_status(
-            payment_id=payment_id,
-            status=status,
-            transaction_hash=transaction_hash,
-            confirmations=confirmations
-        )
-        if status != "confirmed":
-            await OrderService.update_payment_status(
-                db, payment_id, "pending", transaction_hash, confirmations
+        async with db.begin():
+            payment_result = await db.execute(
+                select(Payment).where(Payment.payment_id == payment_id).with_for_update()
             )
-            return False
-        
-        # 更新支付状态
-        await OrderService.update_payment_status(
-            db, payment_id, "confirmed", transaction_hash, confirmations
-        )
-        
-        # 更新订单状态
-        await OrderService.update_order_status(db, payment.order_id, OrderStatus.PAID)
-        
-        # 如果是充值订单，增加用户余额
-        order = await OrderService.get_order_by_id(db, payment.order_id)
-        if order and order.type == OrderType.RECHARGE:
-            user_result = await db.execute(select(User).where(User.id == payment.user_id))
-            user = user_result.scalar_one_or_none()
-            
-            if user:
-                balance_before = user.balance
-                balance_after = balance_before + order.amount
-                
-                # 更新用户余额
+            payment = payment_result.scalar_one_or_none()
+            if not payment:
+                return False
+
+            # 检查确认数是否足够
+            status = "confirmed" if confirmations >= payment.required_confirmations else "pending"
+            await crypto_payment_service.update_payment_status(
+                payment_id=payment_id,
+                status=status,
+                transaction_hash=transaction_hash,
+                confirmations=confirmations
+            )
+
+            payment.status = status
+            payment.transaction_hash = transaction_hash or payment.transaction_hash
+            payment.confirmations = confirmations
+            if status == "confirmed" and not payment.confirmed_at:
+                payment.confirmed_at = datetime.utcnow()
+
+            if status != "confirmed":
+                return False
+
+            order_result = await db.execute(
+                select(Order).where(Order.id == payment.order_id).with_for_update()
+            )
+            order = order_result.scalar_one_or_none()
+            if not order:
+                return False
+
+            already_credited = bool(order.credited_at) or order.status == OrderStatus.COMPLETED
+            if order.type == OrderType.RECHARGE and not already_credited:
+                existing_log = await db.execute(
+                    select(BalanceLog.id)
+                    .where(
+                        BalanceLog.related_order_id == order.id,
+                        BalanceLog.type == "recharge"
+                    )
+                    .limit(1)
+                )
+                if existing_log.scalar_one_or_none():
+                    already_credited = True
+
+                existing_txn = await db.execute(
+                    select(Transaction.id)
+                    .where(
+                        Transaction.order_id == order.id,
+                        Transaction.type == "recharge"
+                    )
+                    .limit(1)
+                )
+                if existing_txn.scalar_one_or_none():
+                    already_credited = True
+
+            if already_credited:
+                if order.type == OrderType.RECHARGE and not order.credited_at:
+                    order.credited_at = order.completed_at or datetime.utcnow()
+                if order.status == OrderStatus.PENDING:
+                    order.status = OrderStatus.PAID
+                    if not order.paid_at:
+                        order.paid_at = datetime.utcnow()
+                if order.type == OrderType.RECHARGE and order.status != OrderStatus.COMPLETED:
+                    order.status = OrderStatus.COMPLETED
+                    if not order.completed_at:
+                        order.completed_at = datetime.utcnow()
+                return True
+
+            if order.status == OrderStatus.PENDING:
+                order.status = OrderStatus.PAID
+                order.paid_at = datetime.utcnow()
+            elif order.status == OrderStatus.PAID and not order.paid_at:
+                order.paid_at = datetime.utcnow()
+
+            # 如果是充值订单，增加用户余额
+            if order.type == OrderType.RECHARGE:
+                user_result = await db.execute(
+                    select(User).where(User.id == payment.user_id).with_for_update()
+                )
+                user = user_result.scalar_one_or_none()
+                if not user:
+                    return False
+
+                balance_before = Decimal(user.balance or 0)
+                balance_after = balance_before + Decimal(order.amount)
                 user.balance = balance_after
-                await db.commit()
-                
-                # 创建交易记录
-                transaction_data = TransactionCreate(
+
+                credited_time = datetime.utcnow()
+
+                transaction = Transaction(
+                    transaction_id=await OrderService.generate_transaction_id(),
                     order_id=order.id,
+                    user_id=payment.user_id,
                     type="recharge",
                     amount=order.amount,
                     balance_before=balance_before,
                     balance_after=balance_after,
                     description="充值到账"
                 )
-                await OrderService.create_transaction(db, payment.user_id, transaction_data)
-                
-                # 创建余额日志
-                log_data = BalanceLogCreate(
+                db.add(transaction)
+
+                balance_log = BalanceLog(
+                    user_id=payment.user_id,
                     type="recharge",
                     amount=order.amount,
                     balance_before=balance_before,
@@ -415,11 +472,12 @@ class OrderService:
                     description="充值到账",
                     related_order_id=order.id
                 )
-                await OrderService.create_balance_log(db, payment.user_id, log_data)
-                
-                # 更新订单状态为已完成
-                await OrderService.update_order_status(db, order.id, OrderStatus.COMPLETED)
-        
+                db.add(balance_log)
+
+                order.status = OrderStatus.COMPLETED
+                order.completed_at = credited_time
+                order.credited_at = credited_time
+
         return True
 
     @staticmethod

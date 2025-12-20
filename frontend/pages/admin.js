@@ -238,7 +238,7 @@ class AdminPage {
             console.log('开始加载仪表板数据...');
             this.showLoading();
             
-            const stats = await api.get('/admin/stats/dashboard');
+            const stats = await api.get('/api/v1/admin/stats/dashboard');
             console.log('仪表板数据响应:', stats);
             
             // 更新统计卡片 - 添加安全检查
@@ -348,7 +348,7 @@ class AdminPage {
         try {
             this.showLoading();
             
-            const users = await api.get('/admin/users');
+            const users = await api.get('/api/v1/admin/users');
             this.renderUsers(users);
         } catch (error) {
             console.error('Failed to load users:', error);
@@ -387,13 +387,13 @@ class AdminPage {
                 <td>${new Date(user.created_at).toLocaleString()}</td>
                 <td>
                     <div class="btn-group">
-                        <button class="btn btn-sm btn-outline" onclick="adminPage.viewUser(${user.id})">
+                        <button class="btn btn-sm btn-outline" onclick="window.adminPage.viewUser(${user.id})" title="查看用户">
                             <i class="fas fa-eye"></i>
                         </button>
-                        <button class="btn btn-sm btn-outline" onclick="adminPage.toggleUser(${user.id})">
+                        <button class="btn btn-sm btn-outline" onclick="window.adminPage.toggleUser(${user.id})" title="${user.is_active ? '禁用用户' : '启用用户'}">
                             <i class="fas fa-${user.is_active ? 'ban' : 'check'}"></i>
                         </button>
-                        <button class="btn btn-sm btn-outline" onclick="adminPage.adjustBalance(${user.id}, ${user.balance})">
+                        <button class="btn btn-sm btn-outline" onclick="window.adminPage.adjustBalance(${user.id}, ${user.balance})" title="充值/调整余额">
                             <i class="fas fa-wallet"></i>
                         </button>
                     </div>
@@ -413,7 +413,7 @@ class AdminPage {
                 params.search = searchTerm;
             }
             
-            const users = await api.get('/admin/users', { params });
+            const users = await api.get('/api/v1/admin/users', { params });
             this.renderUsers(users);
         } catch (error) {
             console.error('Failed to search users:', error);
@@ -427,7 +427,7 @@ class AdminPage {
         try {
             this.showLoading();
             
-            const user = await api.get(`/admin/users/${userId}`);
+            const user = await api.get(`/api/v1/admin/users/${userId}`);
             this.showUserModal(user);
         } catch (error) {
             console.error('Failed to load user:', error);
@@ -441,7 +441,7 @@ class AdminPage {
         try {
             this.showLoading();
             
-            await api.put(`/admin/users/${userId}/toggle`);
+            await api.put(`/api/v1/admin/users/${userId}/toggle`);
             this.showToast('用户状态更新成功', 'success');
             this.loadUsers();
         } catch (error) {
@@ -481,7 +481,7 @@ class AdminPage {
         try {
             this.showLoading();
             
-            await api.post(`/admin/users/${this.currentUserId}/adjust-balance`, {
+            await api.post(`/api/v1/admin/users/${this.currentUserId}/adjust-balance`, {
                 amount: amount,
                 description: description
             });
@@ -544,7 +544,7 @@ class AdminPage {
         try {
             this.showLoading();
             
-            const orders = await api.get('/admin/orders');
+            const orders = await api.get('/api/v1/admin/orders');
             this.renderOrders(orders.orders);
         } catch (error) {
             console.error('Failed to load orders:', error);
@@ -605,7 +605,7 @@ class AdminPage {
                 params.status = status;
             }
             
-            const orders = await api.get('/admin/orders', { params });
+            const orders = await api.get('/api/v1/admin/orders', { params });
             this.renderOrders(orders.orders);
         } catch (error) {
             console.error('Failed to filter orders:', error);
@@ -619,7 +619,7 @@ class AdminPage {
         try {
             this.showLoading();
             
-            const payments = await api.get('/admin/payments');
+            const payments = await api.get('/api/v1/admin/payments');
             this.renderPayments(payments);
         } catch (error) {
             console.error('Failed to load payments:', error);
@@ -667,8 +667,8 @@ class AdminPage {
             this.showLoading();
             
             const [orderStats, paymentStats] = await Promise.all([
-                api.get('/admin/stats/orders'),
-                api.get('/admin/stats/payments')
+                api.get('/api/v1/admin/stats/orders'),
+                api.get('/api/v1/admin/stats/payments')
             ]);
             
             this.renderOrderStatsChart(orderStats);
@@ -781,16 +781,23 @@ class AdminPage {
     }
 
     showLoading(message = '加载中...') {
-        const loading = document.createElement('div');
-        loading.id = 'loadingOverlay';
-        loading.className = 'loading-overlay';
-        loading.innerHTML = `
-            <div class="loading-spinner">
-                <i class="fas fa-spinner fa-spin"></i>
-                <p>${message}</p>
-            </div>
-        `;
-        document.body.appendChild(loading);
+        let loading = document.getElementById('loadingOverlay');
+        if (!loading) {
+            loading = document.createElement('div');
+            loading.id = 'loadingOverlay';
+            loading.className = 'loading-overlay';
+            loading.innerHTML = `
+                <div class="loading-spinner">
+                    <i class="fas fa-spinner fa-spin"></i>
+                    <p></p>
+                </div>
+            `;
+            document.body.appendChild(loading);
+        }
+        const messageNode = loading.querySelector('p');
+        if (messageNode) {
+            messageNode.textContent = message;
+        }
     }
 
     hideLoading() {
@@ -806,7 +813,7 @@ class AdminPage {
             this.showLoading();
             
             // 加载产品统计
-            const stats = await api.get('/admin/proxy-products/stats');
+            const stats = await api.get('/api/v1/admin/proxy-products/stats');
             this.renderProductStats(stats);
             
             // 加载产品列表
@@ -839,7 +846,7 @@ class AdminPage {
             if (provider) params.provider = provider;
             if (is_active) params.is_active = is_active === 'true';
             
-            const products = await api.get('/admin/proxy-products', { params });
+            const products = await api.get('/api/v1/admin/proxy-products', { params });
             this.renderProducts(products);
         } catch (error) {
             console.error('Failed to load products list:', error);
@@ -849,7 +856,7 @@ class AdminPage {
 
     async loadProductFilters() {
         try {
-            const categories = await api.get('/admin/proxy-products/categories');
+            const categories = await api.get('/api/v1/admin/proxy-products/categories');
             
             // 更新提供商筛选器
             const providerFilter = document.getElementById('productProviderFilter');
@@ -966,7 +973,7 @@ class AdminPage {
         try {
             this.showLoading();
             
-            const product = await api.get(`/admin/proxy-products/${productId}`);
+            const product = await api.get(`/api/v1/admin/proxy-products/${productId}`);
             this.showProductDetailModal(product);
         } catch (error) {
             console.error('Failed to load product:', error);
@@ -1065,7 +1072,7 @@ class AdminPage {
         try {
             this.showLoading();
             
-            const product = await api.get(`/admin/proxy-products/${productId}`);
+            const product = await api.get(`/api/v1/admin/proxy-products/${productId}`);
             
             // 填充表单
             document.getElementById('productId').value = product.id;
@@ -1169,10 +1176,10 @@ class AdminPage {
             this.showLoading();
             
             if (isEdit) {
-                await api.put(`/admin/proxy-products/${productId}`, productData);
+                await api.put(`/api/v1/admin/proxy-products/${productId}`, productData);
                 this.showToast('产品更新成功', 'success');
             } else {
-                await api.post('/admin/proxy-products', productData);
+                await api.post('/api/v1/admin/proxy-products', productData);
                 this.showToast('产品创建成功', 'success');
             }
             
@@ -1190,7 +1197,7 @@ class AdminPage {
         try {
             this.showLoading();
             
-            await api.put(`/admin/proxy-products/${productId}/toggle`);
+            await api.put(`/api/v1/admin/proxy-products/${productId}/toggle`);
             this.showToast('产品状态更新成功', 'success');
             this.loadProducts();
             
@@ -1210,7 +1217,7 @@ class AdminPage {
         try {
             this.showLoading();
             
-            await api.delete(`/admin/proxy-products/${productId}`);
+            await api.delete(`/api/v1/admin/proxy-products/${productId}`);
             this.showToast('产品删除成功', 'success');
             this.loadProducts();
             
@@ -1339,8 +1346,8 @@ class AdminPage {
             
             // 并行加载提供商列表和产品选项
             const [providers, products] = await Promise.all([
-                api.get('/admin/upstream-providers'),
-                api.get('/admin/proxy-products')
+                api.get('/api/v1/admin/upstream-providers'),
+                api.get('/api/v1/admin/proxy-products')
             ]);
             
             this.renderProvidersList(providers);
@@ -1373,7 +1380,7 @@ class AdminPage {
             if (providerId) params.provider_id = providerId;
             if (is_active) params.is_active = is_active === 'true';
             
-            const mappings = await api.get('/admin/product-mappings', { params });
+            const mappings = await api.get('/api/v1/admin/product-mappings', { params });
             this.renderProductMappings(mappings);
         } catch (error) {
             console.error('Failed to load product mappings list:', error);
@@ -1493,7 +1500,7 @@ class AdminPage {
         try {
             this.showLoading();
             
-            const mapping = await api.get(`/admin/product-mappings/${mappingId}`);
+            const mapping = await api.get(`/api/v1/admin/product-mappings/${mappingId}`);
             
             // 填充表单
             document.getElementById('mappingId').value = mapping.id;
@@ -1555,10 +1562,10 @@ class AdminPage {
             this.showLoading();
             
             if (isEdit) {
-                await api.put(`/admin/product-mappings/${mappingId}`, mappingData);
+                await api.put(`/api/v1/admin/product-mappings/${mappingId}`, mappingData);
                 this.showToast('产品映射更新成功', 'success');
             } else {
-                await api.post('/admin/product-mappings', mappingData);
+                await api.post('/api/v1/admin/product-mappings', mappingData);
                 this.showToast('产品映射添加成功', 'success');
             }
             
@@ -1577,7 +1584,7 @@ class AdminPage {
         try {
             this.showLoading();
             
-            const mapping = await api.get(`/admin/product-mappings/${mappingId}`);
+            const mapping = await api.get(`/api/v1/admin/product-mappings/${mappingId}`);
             this.showMappingDetailModal(mapping);
         } catch (error) {
             console.error('Failed to load mapping:', error);
@@ -1648,7 +1655,7 @@ class AdminPage {
         try {
             this.showLoading();
             
-            await api.put(`/admin/product-mappings/${mappingId}/toggle`);
+            await api.put(`/api/v1/admin/product-mappings/${mappingId}/toggle`);
             this.showToast('映射状态更新成功', 'success');
             this.loadProductMappings();
             
@@ -1668,7 +1675,7 @@ class AdminPage {
         try {
             this.showLoading();
             
-            await api.delete(`/admin/product-mappings/${mappingId}`);
+            await api.delete(`/api/v1/admin/product-mappings/${mappingId}`);
             this.showToast('产品映射删除成功', 'success');
             this.loadProductMappings();
             
@@ -1685,7 +1692,7 @@ class AdminPage {
         try {
             this.showLoading();
             
-            const providers = await api.get('/admin/upstream-providers');
+            const providers = await api.get('/api/v1/admin/upstream-providers');
             this.renderProviders(providers);
         } catch (error) {
             console.error('Failed to load providers:', error);
@@ -1784,7 +1791,7 @@ class AdminPage {
         try {
             this.showLoading();
             
-            const provider = await api.get(`/admin/upstream-providers/${providerId}`);
+            const provider = await api.get(`/api/v1/admin/upstream-providers/${providerId}`);
             
             // 填充表单
             document.getElementById('providerId').value = provider.id;
@@ -1850,10 +1857,10 @@ class AdminPage {
             this.showLoading();
             
             if (isEdit) {
-                await api.put(`/admin/upstream-providers/${providerId}`, providerData);
+                await api.put(`/api/v1/admin/upstream-providers/${providerId}`, providerData);
                 this.showToast('提供商更新成功', 'success');
             } else {
-                await api.post('/admin/upstream-providers', providerData);
+                await api.post('/api/v1/admin/upstream-providers', providerData);
                 this.showToast('提供商添加成功', 'success');
             }
             
@@ -1872,7 +1879,7 @@ class AdminPage {
         try {
             this.showLoading();
             
-            const provider = await api.get(`/admin/upstream-providers/${providerId}`);
+            const provider = await api.get(`/api/v1/admin/upstream-providers/${providerId}`);
             this.showProviderDetailModal(provider);
         } catch (error) {
             console.error('Failed to load provider:', error);
@@ -1949,7 +1956,7 @@ class AdminPage {
         try {
             this.showLoading();
             
-            await api.put(`/admin/upstream-providers/${providerId}/toggle`);
+            await api.put(`/api/v1/admin/upstream-providers/${providerId}/toggle`);
             this.showToast('提供商状态更新成功', 'success');
             this.loadProviders();
             
@@ -1969,7 +1976,7 @@ class AdminPage {
         try {
             this.showLoading();
             
-            await api.delete(`/admin/upstream-providers/${providerId}`);
+            await api.delete(`/api/v1/admin/upstream-providers/${providerId}`);
             this.showToast('提供商删除成功', 'success');
             this.loadProviders();
             

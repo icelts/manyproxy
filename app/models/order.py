@@ -46,6 +46,7 @@ class Order(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     paid_at = Column(DateTime(timezone=True))
     completed_at = Column(DateTime(timezone=True))
+    credited_at = Column(DateTime(timezone=True))
 
     # 关系
     user = relationship("User", back_populates="orders")

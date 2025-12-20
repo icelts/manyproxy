@@ -22,15 +22,18 @@ class CryptoPaymentService:
     def __init__(self):
         self.use_cryptomus = bool(settings.CRYPTOMUS_API_KEY and settings.CRYPTOMUS_MERCHANT_UUID)
         
-        # 支持的加密货币配置
+        # 仅保留允许的 USDT 网络（例如 TRON / ETH / BSC），其他币种不暴露给前端
+        self.allowed_currency = "USDT"
+        self.allowed_networks = {"TRON", "ETH", "BSC"}
+        # 配置映射，network_api 为 Cryptomus 接口需要的大写网络标识
         self.supported_currencies = {
-            'BTC': {'name': 'Bitcoin', 'symbol': '₿', 'network': 'BTC'},
-            'ETH': {'name': 'Ethereum', 'symbol': 'Ξ', 'network': 'ETH'},
-            'USDT': {'name': 'Tether', 'symbol': '₮', 'network': 'TRC20'},
-            'USDC': {'name': 'USD Coin', 'symbol': '$', 'network': 'TRC20'},
-            'TRX': {'name': 'Tron', 'symbol': 'TRX', 'network': 'TRX'},
-            'LTC': {'name': 'Litecoin', 'symbol': 'Ł', 'network': 'LTC'},
-            'DASH': {'name': 'Dash', 'symbol': 'Đ', 'network': 'DASH'}
+            'USDT': {
+                'name': 'Tether',
+                'symbol': '₮',
+                # 默认展示网络名（前端可覆盖），network_api 在构建请求时按用户选择的网络填充
+                'network': 'TRC20',
+                'network_api': None
+            }
         }
         
         # 内部支付会话存储（用于缓存和状态跟踪）
@@ -65,7 +68,8 @@ class CryptoPaymentService:
         amount: float, 
         currency: str, 
         payment_id: Optional[str] = None,
-        callback_url: Optional[str] = None
+        callback_url: Optional[str] = None,
+        network: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         创建支付订单
@@ -79,9 +83,15 @@ class CryptoPaymentService:
         Returns:
             支付信息字典
         """
+        # 生产环境不再静默回退到 mock，未配置直接报错
         if not self.use_cryptomus:
             raise RuntimeError("Cryptomus 未配置，无法创建真实支付")
         
+        # 直接调用真实 Cryptomus，如有异常上抛交由上层处理
+        return await self._create_cryptomus_payment(amount, currency, payment_id, None, callback_url, network)
+    
+    async def _create_cryptomus_payment(self, amount: float, currency: str, payment_id: str, user_id: int, callback_url: Optional[str] = None, network: Optional[str] = None) -> Dict[str, Any]:
+        """创建Cryptomus真实支付"""
         # 生成支付ID
         payment_id = payment_id or f"pay_{int(datetime.now().timestamp())}_{uuid.uuid4().hex[:8]}"
 
@@ -94,30 +104,41 @@ class CryptoPaymentService:
         if not currency_info:
             raise ValueError(f"Unsupported currency: {currency}")
 
+        # 根据订单指定的网络，缺省回退 TRON
+        network = (network or '').upper() or 'TRON'
+        if network not in self.allowed_networks:
+            raise ValueError(f"Unsupported network for USDT: {network}")
+
         # 调用Cryptomus API创建支付
         async with get_cryptomus_client() as client:
+            # 直接以目标加密货币计价，避免 to_currency 触发"Not found service to_currency"
             cryptomus_response = await client.create_payment(
                 amount=amount,
-                currency="USD",
+                currency=currency.upper(),  # 发起订单使用目标加密货币
                 order_id=payment_id,
-                currency_from="USD",
-                to_currency=currency.upper(),
+                currency_from=None,  # 不做法币换算
+                to_currency=None,
                 url_callback=callback_url,
-                lifetime=3600,  # 1小时有效期
-                network=currency_info['network']
+                lifetime=1800,  # 30分钟有效期，避免立即过期
+                network=network
             )
 
-        # 解析Cryptomus响应
-        if cryptomus_response.get('state') != 1:
+        # 解析Cryptomus响应（允许 state=0 但带 result 的情况）
+        if cryptomus_response.get('state') not in (0, 1):
             raise Exception(f"Cryptomus payment creation failed: {cryptomus_response.get('message', 'Unknown error')}")
 
         result = cryptomus_response.get('result', {})
+        if not result:
+            raise Exception("Cryptomus payment creation returned empty result")
+
+        required_confirmations = 12 if network in {"ETH", "BSC"} else 1
 
         # 转换为标准格式
         payment_info = {
             'payment_id': result.get('uuid', payment_id),
             'order_id': result.get('order_id', payment_id),
             'wallet_address': result.get('address'),
+            'address_qr_code': result.get('address_qr_code'),
             'crypto_amount': result.get('amount', '0'),
             'crypto_currency': result.get('currency', currency.upper()),
             'usd_amount': str(amount),
@@ -125,12 +146,14 @@ class CryptoPaymentService:
             'payment_url': result.get('url'),
             'status': self._convert_cryptomus_status(result.get('payment_status', 'check')),
             'confirmations': 0,
-            'required_confirmations': self._get_required_confirmations(currency),
+            'required_confirmations': required_confirmations,
             'expires_at': datetime.fromtimestamp(result.get('expired_at', 0)).isoformat() if result.get('expired_at') else None,
             'created_at': datetime.utcnow().isoformat(),
             'updated_at': datetime.utcnow().isoformat(),
             'provider': 'cryptomus',
-            'merchant_uuid': settings.CRYPTOMUS_MERCHANT_UUID
+            'merchant_uuid': settings.CRYPTOMUS_MERCHANT_UUID,
+            # 额外保存 Cryptomus 返回的 uuid，方便后续状态查询
+            'cryptomus_uuid': result.get('uuid')
         }
 
         # 缓存支付信息（内存 + Redis）
@@ -211,8 +234,15 @@ class CryptoPaymentService:
         # 如果是Cryptomus支付，查询实时状态
         if cached_payment.get('provider') == 'cryptomus' and self.use_cryptomus:
             try:
+                # 优先使用 Cryptomus 返回的 uuid；否则使用下单时传入的 order_id（即我方 payment_id）
+                lookup_kwargs = {}
+                if cached_payment.get('cryptomus_uuid'):
+                    lookup_kwargs['payment_id'] = cached_payment['cryptomus_uuid']
+                else:
+                    lookup_kwargs['order_id'] = cached_payment.get('order_id') or payment_id
+
                 async with get_cryptomus_client() as client:
-                    response = await client.get_payment_info(payment_id=payment_id)
+                    response = await client.get_payment_info(**lookup_kwargs)
                 
                 if response.get('state') != 1:
                     logger.warning(f"Failed to get payment status: {response.get('message', 'Unknown error')}")
@@ -278,7 +308,7 @@ class CryptoPaymentService:
     
     def generate_qr_code(self, payment_id: str, wallet_address: str, crypto_amount: str, currency: str) -> str:
         """
-        生成支付二维码
+        生成支付二维码（仅在Cryptomus未返回时使用）
         
         Args:
             payment_id: 支付ID
@@ -303,9 +333,10 @@ class CryptoPaymentService:
         else:
             qr_data = wallet_address
         
-        # 实际项目中应该使用二维码库生成二维码图片
-        # 这里返回模拟的二维码数据
-        return f"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
+        # 使用外部QR码服务生成二维码（仅在Cryptomus未返回二维码时使用）
+        import urllib.parse
+        encoded_qr_data = urllib.parse.quote(qr_data, safe='')
+        return f"https://api.qrserver.com/v1/create-qr-code/?size=220x220&data={encoded_qr_data}"
     
     async def cancel_payment(self, payment_id: str) -> Dict[str, Any]:
         """
@@ -334,48 +365,53 @@ class CryptoPaymentService:
         Returns:
             支持的货币信息
         """
-        if self.use_cryptomus:
-            try:
-                # 从Cryptomus获取实时服务列表
-                async with get_cryptomus_client() as client:
-                    response = await client.get_services()
-                
-                if response.get('state') == 1:
-                    services = response.get('result', [])
-                    currencies = []
-                    
-                    for service in services:
-                        currency_code = service.get('currency')
-                        if currency_code and currency_code in self.supported_currencies:
-                            currency_info = self.supported_currencies[currency_code]
-                            currencies.append({
-                                'code': currency_code,
-                                'name': currency_info['name'],
-                                'symbol': currency_info['symbol'],
-                                'network': service.get('network', currency_info['network']),
-                                'available': service.get('is_available', True),
-                                'limit': service.get('limit', {}),
-                                'commission': service.get('commission', {})
-                            })
-                    
-                    return {'currencies': currencies}
-                    
-            except Exception as e:
-                logger.error(f"Failed to get Cryptomus services: {str(e)}")
-        
-        # 回退到默认货币列表
+        if not self.use_cryptomus:
+            raise RuntimeError("Cryptomus 未配置，无法获取可用币种")
+
+        # 直接从 Cryptomus 拉取，失败则抛出异常（不做本地兜底）
+        async with get_cryptomus_client() as client:
+            response = await client.get_services()
+
+        if response.get('state') not in (0, 1):
+            raise RuntimeError(response.get('message', 'Failed to fetch Cryptomus services'))
+
+        services = response.get('result', [])
+        if not services:
+            raise RuntimeError("Cryptomus returned empty services list")
         currencies = []
-        for code, info in self.supported_currencies.items():
+
+        allowed_networks_upper = {n.upper() for n in self.allowed_networks}
+
+        for service in services:
+            currency_code = service.get('currency')
+            network_code = (service.get('network') or '').upper()
+
+            # 仅保留允许的币种和网络
+            if currency_code != self.allowed_currency or network_code not in allowed_networks_upper:
+                continue
+
+            currency_info = self.supported_currencies[currency_code]
+            # 确定展示的网络名称
+            display_network = service.get('network', currency_info['network'])
+            required_conf = 12 if network_code in {"ETH", "BSC"} else 1
+
             currencies.append({
-                'code': code,
-                'name': info['name'],
-                'symbol': info['symbol'],
-                'network': info['network'],
-                'available': True,
-                'rate': self._get_mock_rate(code),
-                'confirmations': self._get_required_confirmations(code)
+                'code': currency_code,
+                'name': currency_info['name'],
+                'symbol': currency_info['symbol'],
+                'network': display_network,
+                'network_code': network_code,
+                'available': service.get('is_available', True),
+                'limit': service.get('limit', {}),
+                'commission': service.get('commission', {}),
+                # USDT 固定汇率为 1，网络确认数按链路设定
+                'rate': 1.0,
+                'confirmations': required_conf
             })
-        
+
+        if not currencies:
+            raise RuntimeError("No allowed USDT networks available from Cryptomus")
+
         return {'currencies': currencies}
     
     def _convert_cryptomus_status(self, cryptomus_status: str) -> str:

@@ -6,7 +6,7 @@
     <title data-i18n="recharge.pageTitle">ManyProxy - 余额充值</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-    <link href="../css/style.css" rel="stylesheet">
+    <link href="../css/style.css?v=3" rel="stylesheet">
 </head>
 <body>
     <div id="navbar-container"></div>
@@ -86,7 +86,10 @@
                             <h4 id="paymentAmount" class="mb-0">$0.00</h4>
                         </div>
                         <div class="mb-3">
-                            <label class="form-label" data-i18n="recharge.paymentAddress">付款地址</label>
+                            <div class="d-flex justify-content-between align-items-center">
+                                <label class="form-label mb-1" data-i18n="recharge.paymentAddress">付款地址</label>
+                                <small class="text-muted">Network: <span id="paymentNetwork">--</span></small>
+                            </div>
                             <div class="input-group">
                                 <input type="text" id="paymentAddress" class="form-control" readonly>
                                 <button class="btn btn-outline-secondary" type="button" id="copyAddressBtn">
@@ -147,11 +150,11 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="../js/config.js?v=2"></script>
-    <script src="../js/api.js?v=2"></script>
-    <script src="../js/auth.js?v=2"></script>
-    <script src="../js/i18n.js?v=2"></script>
-    <script src="../js/recharge.js?v=2"></script>
+    <script src="../js/config.js?v=3"></script>
+    <script src="../js/api.js?v=3"></script>
+    <script src="../js/auth.js?v=3"></script>
+    <script src="../js/i18n.js?v=3"></script>
+    <script src="../js/recharge.js?v=3"></script>
     <script src="../components/navbar.js?v=2"></script>
     <script>
         document.addEventListener('DOMContentLoaded', async () => {
