@@ -6,36 +6,39 @@
     <title data-i18n="recharge.pageTitle">ManyProxy - 余额充值</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
     <link href="../css/style.css?v=3" rel="stylesheet">
 </head>
-<body>
+<body class="recharge-page">
     <div id="navbar-container"></div>
 
-    <main class="container py-4">
-        <div class="d-flex justify-content-between align-items-center mb-4">
-            <div>
+    <main class="container py-4 recharge-main">
+        <div class="d-flex justify-content-between align-items-center mb-4 recharge-hero">
+            <div class="recharge-hero-text">
                 <h2 class="mb-1" data-i18n="recharge.title" data-i18n-target="html">
                     <i class="fas fa-wallet"></i> 余额充值
                 </h2>
                 <p class="text-muted mb-0" data-i18n="recharge.subtitle">支持多种加密货币，快速为账户充值</p>
             </div>
-            <div class="text-end">
-                <small class="text-muted" data-i18n="common.balance">当前余额</small>
-                <h4 id="userBalance" class="mb-0 text-primary">--</h4>
+            <div class="text-end recharge-balance">
+                <small class="text-muted balance-label" data-i18n="common.balance">当前余额</small>
+                <h4 id="userBalance" class="mb-0 text-primary balance-pill">--</h4>
             </div>
         </div>
 
         <div class="row g-4">
             <div class="col-lg-6">
-                <div class="card shadow-sm h-100">
-                    <div class="card-header bg-white">
+                <div class="card shadow-sm h-100 recharge-card" style="--delay: 0.05s">
+                    <div class="card-header">
                         <h5 class="mb-0" data-i18n="recharge.amountTitle" data-i18n-target="html">
                             <i class="fas fa-credit-card"></i> 选择充值金额
                         </h5>
                     </div>
                     <div class="card-body">
                         <form id="rechargeForm">
-                            <div class="mb-3 d-flex flex-wrap gap-2">
+                            <div class="mb-3 amount-options">
                                 <button type="button" class="btn btn-outline-primary amount-btn" data-amount="10">$10</button>
                                 <button type="button" class="btn btn-outline-primary amount-btn" data-amount="25">$25</button>
                                 <button type="button" class="btn btn-outline-primary amount-btn" data-amount="50">$50</button>
@@ -54,15 +57,21 @@
                                 </select>
                             </div>
                             <div class="mb-3">
-                                <label for="cryptoCurrency" class="form-label" data-i18n="recharge.cryptoCurrency">选择加密货币</label>
+                                <label for="cryptoCurrency" class="form-label" data-i18n="recharge.cryptoCurrency">Select Cryptocurrency</label>
                                 <select id="cryptoCurrency" class="form-select">
-                                    <option value="">Loading...</option>
+                                    <option value="" data-i18n="common.loading">Loading...</option>
                                 </select>
                             </div>
                             <div class="mb-3">
-                                <label class="form-label" data-i18n="recharge.rates">当前汇率</label>
-                                <div class="p-3 border rounded bg-light" id="exchangeRates">
-                                    <p class="text-muted mb-0" data-i18n="common.loading">加载中...</p>
+                                <label for="cryptoNetwork" class="form-label" data-i18n="recharge.cryptoNetwork">Network</label>
+                                <select id="cryptoNetwork" class="form-select">
+                                    <option value="" data-i18n="recharge.networkPlaceholder">Select network</option>
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label" data-i18n="recharge.serviceInfo">Service Info</label>
+                                <div class="p-3 border rounded service-info" id="serviceInfo">
+                                    <p class="text-muted mb-0" data-i18n="common.loading">Loading...</p>
                                 </div>
                             </div>
                             <button type="submit" class="btn btn-primary w-100" data-i18n="recharge.submit" data-i18n-target="html">
@@ -74,21 +83,45 @@
             </div>
 
             <div class="col-lg-6">
-                <div class="card shadow-sm mb-4" id="paymentCard" style="display: none;">
-                    <div class="card-header bg-white">
+                <div class="card shadow-sm mb-4 recharge-card payment-card" id="paymentCard" style="display: none; --delay: 0.12s;">
+                    <div class="card-header">
                         <h5 class="mb-0" data-i18n="recharge.scanTitle" data-i18n-target="html">
                             <i class="fas fa-qrcode"></i> 扫码支付
                         </h5>
                     </div>
                     <div class="card-body">
                         <div class="mb-3">
-                            <small class="text-muted" data-i18n="recharge.paymentAmount">充值金额</small>
+                            <small class="text-muted" data-i18n="recharge.paymentAmount">Recharge Amount</small>
                             <h4 id="paymentAmount" class="mb-0">$0.00</h4>
+                            <div class="small text-muted" id="paymentIdLine">
+                                <span data-i18n="recharge.paymentId">Payment ID</span>: <span id="paymentId">--</span>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="paymentCryptoAmount" class="form-label" data-i18n="recharge.cryptoAmount">Crypto Amount</label>
+                            <div class="input-group">
+                                <input type="text" id="paymentCryptoAmount" class="form-control" readonly>
+                                <button class="btn btn-outline-secondary" type="button" id="copyAmountBtn">
+                                    <i class="fas fa-copy"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="mb-3" id="paymentLinkGroup" style="display: none;">
+                            <label for="paymentLink" class="form-label" data-i18n="recharge.paymentLink">Payment Link</label>
+                            <div class="input-group">
+                                <input type="text" id="paymentLink" class="form-control" readonly>
+                                <button class="btn btn-outline-secondary" type="button" id="openPaymentLinkBtn" data-i18n="recharge.openPayLink" data-i18n-target="html">
+                                    <i class="fas fa-external-link-alt"></i> Open
+                                </button>
+                                <button class="btn btn-outline-secondary" type="button" id="copyPaymentLinkBtn">
+                                    <i class="fas fa-copy"></i>
+                                </button>
+                            </div>
                         </div>
                         <div class="mb-3">
                             <div class="d-flex justify-content-between align-items-center">
                                 <label class="form-label mb-1" data-i18n="recharge.paymentAddress">付款地址</label>
-                                <small class="text-muted">Network: <span id="paymentNetwork">--</span></small>
+                                <small class="text-muted"><span data-i18n="recharge.networkLabel">Network</span>: <span id="paymentNetwork">--</span></small>
                             </div>
                             <div class="input-group">
                                 <input type="text" id="paymentAddress" class="form-control" readonly>
@@ -98,21 +131,22 @@
                             </div>
                         </div>
                         <div class="text-center mb-3" id="qrCode" data-i18n="common.loading">二维码生成中...</div>
-                        <div class="row text-center">
-                            <div class="col-4">
+                        <div class="row text-center payment-status-grid">
+                            <div class="col-12 col-md-4 status-tile">
                                 <small class="text-muted d-block" data-i18n="recharge.paymentStatus">支付状态</small>
                                 <span id="paymentStatus" class="badge bg-warning text-dark" data-i18n="common.status.pending">待处理</span>
                             </div>
-                            <div class="col-4">
+                            <div class="col-12 col-md-4 status-tile">
                                 <small class="text-muted d-block" data-i18n="recharge.confirmations">确认数</small>
                                 <strong id="confirmations">0 / 1</strong>
                             </div>
-                            <div class="col-4">
+                            <div class="col-12 col-md-4 status-tile">
                                 <small class="text-muted d-block" data-i18n="recharge.remaining">剩余时间</small>
                                 <strong id="remainingTime">30:00</strong>
                             </div>
                         </div>
-                        <div class="d-flex gap-2 mt-3">
+                        <div class="mt-2 small text-muted status-detail" id="paymentStatusDetail"></div>
+                        <div class="d-flex gap-2 mt-3 payment-actions">
                             <button class="btn btn-outline-primary flex-grow-1" id="checkPaymentBtn" data-i18n="recharge.check" data-i18n-target="html">
                                 <i class="fas fa-sync"></i> 检查状态
                             </button>
@@ -123,13 +157,13 @@
                     </div>
                 </div>
 
-                <div class="card shadow-sm">
-                    <div class="card-header bg-white">
+                <div class="card shadow-sm recharge-card" style="--delay: 0.18s">
+                    <div class="card-header">
                         <h5 class="mb-0" data-i18n="recharge.history" data-i18n-target="html">
                             <i class="fas fa-history"></i> 最近充值记录
                         </h5>
                     </div>
-                    <div class="card-body" id="rechargeHistory">
+                    <div class="card-body recharge-history" id="rechargeHistory">
                         <p class="text-muted mb-0" data-i18n="recharge.historyEmpty">暂无充值记录</p>
                     </div>
                 </div>

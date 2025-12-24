@@ -278,7 +278,8 @@ class OrderService:
         amount: Decimal,
         payment_method: PaymentMethod,
         crypto_currency: Optional[CryptoCurrency] = None,
-        crypto_network: Optional[str] = None
+        crypto_network: Optional[str] = None,
+        success_url: Optional[str] = None
     ) -> RechargeResponse:
         """用户充值"""
         # 创建充值订单
@@ -299,7 +300,8 @@ class OrderService:
                 float(amount),
                 crypto_currency.value,
                 payment_id=payment_identifier,
-                network=crypto_network
+                network=crypto_network,
+                success_url=success_url
             )
             
             payment_data = PaymentCreate(
@@ -357,10 +359,12 @@ class OrderService:
         db: AsyncSession,
         payment_id: str,
         transaction_hash: str,
-        confirmations: int
+        confirmations: int,
+        required_confirmations: Optional[int] = None
     ) -> bool:
         """确认支付"""
-        async with db.begin():
+        transaction = db.begin_nested() if db.in_transaction() else db.begin()
+        async with transaction:
             payment_result = await db.execute(
                 select(Payment).where(Payment.payment_id == payment_id).with_for_update()
             )
@@ -368,18 +372,27 @@ class OrderService:
             if not payment:
                 return False
 
+            parsed_confirmations = crypto_payment_service._parse_int(confirmations)
+            if parsed_confirmations is None:
+                parsed_confirmations = 0
+            if required_confirmations is not None:
+                parsed_required = crypto_payment_service._parse_int(required_confirmations)
+                if parsed_required is not None:
+                    payment.required_confirmations = parsed_required
+
             # 检查确认数是否足够
-            status = "confirmed" if confirmations >= payment.required_confirmations else "pending"
+            status = "confirmed" if parsed_confirmations >= payment.required_confirmations else "pending"
             await crypto_payment_service.update_payment_status(
                 payment_id=payment_id,
                 status=status,
                 transaction_hash=transaction_hash,
-                confirmations=confirmations
+                confirmations=parsed_confirmations,
+                required_confirmations=payment.required_confirmations
             )
 
             payment.status = status
             payment.transaction_hash = transaction_hash or payment.transaction_hash
-            payment.confirmations = confirmations
+            payment.confirmations = parsed_confirmations
             if status == "confirmed" and not payment.confirmed_at:
                 payment.confirmed_at = datetime.utcnow()
 

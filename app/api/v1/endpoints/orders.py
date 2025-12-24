@@ -58,6 +58,7 @@ async def get_order(
 @router.post("/recharge", response_model=RechargeResponse)
 async def recharge_balance(
     recharge_data: RechargeRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ):
@@ -81,8 +82,16 @@ async def recharge_balance(
                 )
             recharge_data.crypto_network = default_network
     try:
+        base_url = settings.FRONTEND_BASE_URL or str(request.base_url).rstrip('/')
+        success_url = f"{base_url}/frontend/pages/recharge.html" if base_url else None
         return await OrderService.recharge_balance(
-            db, current_user.id, recharge_data.amount, recharge_data.method, recharge_data.crypto_currency, recharge_data.crypto_network
+            db,
+            current_user.id,
+            recharge_data.amount,
+            recharge_data.method,
+            recharge_data.crypto_currency,
+            recharge_data.crypto_network,
+            success_url=success_url
         )
     except RuntimeError as e:
         # 常见：未配置Cryptomus等支付环境
@@ -155,7 +164,7 @@ async def cryptomus_webhook(
         webhook_data = json.loads(body.decode('utf-8'))
         
         # 获取Cryptomus签名
-        signature = request.headers.get("sign")
+        signature = webhook_data.get("sign")
         if not signature:
             logger.warning("Cryptomus webhook missing signature")
             raise HTTPException(
@@ -164,7 +173,7 @@ async def cryptomus_webhook(
             )
         
         # 验证签名
-        if not crypto_payment_service.verify_webhook_signature(body, signature):
+        if not crypto_payment_service.verify_webhook_signature(webhook_data, signature):
             logger.warning("Invalid Cryptomus webhook signature")
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -174,9 +183,10 @@ async def cryptomus_webhook(
         # 获取支付信息
         payment_uuid = webhook_data.get('uuid')
         order_id = webhook_data.get('order_id')
-        payment_status = webhook_data.get('payment_status', 'check')
+        payment_status = webhook_data.get('status') or webhook_data.get('payment_status', 'check')
         transaction_hash = webhook_data.get('txid')
         confirmations = webhook_data.get('confirmations', 0)
+        required_confirmations = webhook_data.get('required_confirmations') or webhook_data.get('confirmations_required')
         
         if not payment_uuid and not order_id:
             logger.error("Cryptomus webhook missing payment identifiers")
@@ -207,6 +217,13 @@ async def cryptomus_webhook(
         if not payment_record:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Payment not found")
 
+        confirmations = crypto_payment_service._parse_int(confirmations)
+        if confirmations is None:
+            confirmations = 0
+        required_confirmations = crypto_payment_service._parse_int(required_confirmations)
+        if required_confirmations is None:
+            required_confirmations = payment_record.required_confirmations
+
         # 基础校验：订单/商户/金额/币种
         stored_payment = await crypto_payment_service.get_cached_payment(resolved_payment_id)
         if order_id and payment_record.order_id and order_id != (stored_payment or {}).get('order_id', order_id):
@@ -230,6 +247,9 @@ async def cryptomus_webhook(
         # 转换状态
         converted_status = crypto_payment_service._convert_cryptomus_status(payment_status)
 
+        if converted_status in ['confirmed', 'paid'] and required_confirmations and confirmations < required_confirmations:
+            confirmations = required_confirmations
+
         # 如果已经是终态且重复通知，直接返回成功（幂等）
         if stored_payment and crypto_payment_service._is_final_status(stored_payment.get('status', '')) and crypto_payment_service._is_final_status(converted_status) and converted_status == stored_payment.get('status'):
             return {"status": "success", "detail": "duplicate webhook"}
@@ -239,13 +259,18 @@ async def cryptomus_webhook(
             payment_id=resolved_payment_id,
             status=converted_status,
             transaction_hash=transaction_hash,
-            confirmations=confirmations
+            confirmations=confirmations,
+            required_confirmations=required_confirmations
         )
         
         # 如果支付已确认，处理订单
         if converted_status in ['confirmed', 'paid']:
             success = await OrderService.confirm_payment(
-                db, resolved_payment_id, transaction_hash, confirmations
+                db,
+                resolved_payment_id,
+                transaction_hash,
+                confirmations,
+                required_confirmations=required_confirmations
             )
 
             if success:
@@ -325,6 +350,25 @@ async def monitor_payment(
     
     # 获取支付状态
     payment_status = await crypto_payment_service.get_payment_status(payment_id)
+
+    status_value = (payment_status.get('status') or '').lower()
+    if status_value in ['confirmed', 'paid']:
+        confirmations = crypto_payment_service._parse_int(payment_status.get('confirmations'))
+        required_confirmations = crypto_payment_service._parse_int(payment_status.get('required_confirmations'))
+        if required_confirmations is None:
+            required_confirmations = payment.required_confirmations
+        if confirmations is None or (required_confirmations and confirmations < required_confirmations):
+            confirmations = required_confirmations or confirmations or 0
+            payment_status['confirmations'] = confirmations
+            payment_status['required_confirmations'] = required_confirmations
+        transaction_hash = payment_status.get('transaction_hash') or payment_status.get('txid') or ''
+        await OrderService.confirm_payment(
+            db,
+            payment_id,
+            transaction_hash,
+            confirmations or 0,
+            required_confirmations=required_confirmations
+        )
     
     return payment_status
 

@@ -69,7 +69,8 @@ class CryptoPaymentService:
         currency: str, 
         payment_id: Optional[str] = None,
         callback_url: Optional[str] = None,
-        network: Optional[str] = None
+        network: Optional[str] = None,
+        success_url: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         创建支付订单
@@ -88,9 +89,26 @@ class CryptoPaymentService:
             raise RuntimeError("Cryptomus 未配置，无法创建真实支付")
         
         # 直接调用真实 Cryptomus，如有异常上抛交由上层处理
-        return await self._create_cryptomus_payment(amount, currency, payment_id, None, callback_url, network)
+        return await self._create_cryptomus_payment(
+            amount,
+            currency,
+            payment_id,
+            None,
+            callback_url,
+            network,
+            success_url
+        )
     
-    async def _create_cryptomus_payment(self, amount: float, currency: str, payment_id: str, user_id: int, callback_url: Optional[str] = None, network: Optional[str] = None) -> Dict[str, Any]:
+    async def _create_cryptomus_payment(
+        self,
+        amount: float,
+        currency: str,
+        payment_id: str,
+        user_id: int,
+        callback_url: Optional[str] = None,
+        network: Optional[str] = None,
+        success_url: Optional[str] = None
+    ) -> Dict[str, Any]:
         """创建Cryptomus真实支付"""
         # 生成支付ID
         payment_id = payment_id or f"pay_{int(datetime.now().timestamp())}_{uuid.uuid4().hex[:8]}"
@@ -119,21 +137,29 @@ class CryptoPaymentService:
                 currency_from=None,  # 不做法币换算
                 to_currency=None,
                 url_callback=callback_url,
+                url_success=success_url,
                 lifetime=1800,  # 30分钟有效期，避免立即过期
                 network=network
             )
 
-        # 解析Cryptomus响应（允许 state=0 但带 result 的情况）
-        if cryptomus_response.get('state') not in (0, 1):
+        if cryptomus_response.get('state') not in (0, None):
             raise Exception(f"Cryptomus payment creation failed: {cryptomus_response.get('message', 'Unknown error')}")
 
         result = cryptomus_response.get('result', {})
         if not result:
             raise Exception("Cryptomus payment creation returned empty result")
 
-        required_confirmations = 12 if network in {"ETH", "BSC"} else 1
+        required_confirmations = self._parse_int(
+            result.get('required_confirmations') or result.get('confirmations_required')
+        )
+        if required_confirmations is None:
+            required_confirmations = 12 if network in {"ETH", "BSC"} else 1
+        confirmations = self._parse_int(result.get('confirmations'))
+        if confirmations is None:
+            confirmations = 0
 
         # 转换为标准格式
+        raw_status = result.get('payment_status') or result.get('status') or 'check'
         payment_info = {
             'payment_id': result.get('uuid', payment_id),
             'order_id': result.get('order_id', payment_id),
@@ -144,9 +170,15 @@ class CryptoPaymentService:
             'usd_amount': str(amount),
             'network': result.get('network', currency_info['network']),
             'payment_url': result.get('url'),
-            'status': self._convert_cryptomus_status(result.get('payment_status', 'check')),
-            'confirmations': 0,
+            'status': self._convert_cryptomus_status(raw_status),
+            'cryptomus_status': raw_status,
+            'confirmations': confirmations,
             'required_confirmations': required_confirmations,
+            'payer_amount': result.get('payer_amount'),
+            'payer_currency': result.get('payer_currency'),
+            'payment_amount': result.get('payment_amount'),
+            'merchant_amount': result.get('merchant_amount'),
+            'is_final': result.get('is_final'),
             'expires_at': datetime.fromtimestamp(result.get('expired_at', 0)).isoformat() if result.get('expired_at') else None,
             'created_at': datetime.utcnow().isoformat(),
             'updated_at': datetime.utcnow().isoformat(),
@@ -244,18 +276,35 @@ class CryptoPaymentService:
                 async with get_cryptomus_client() as client:
                     response = await client.get_payment_info(**lookup_kwargs)
                 
-                if response.get('state') != 1:
+                if response.get('state') not in (0, None):
                     logger.warning(f"Failed to get payment status: {response.get('message', 'Unknown error')}")
                     return cached_payment
                 
                 result = response.get('result', {})
                 
                 # 更新缓存状态
+                raw_status = result.get('payment_status') or result.get('status') or 'check'
+                updated_confirmations = self._parse_int(result.get('confirmations'))
+                updated_required = self._parse_int(
+                    result.get('required_confirmations') or result.get('confirmations_required')
+                )
                 updated_payment = {
                     **cached_payment,
-                    'status': self._convert_cryptomus_status(result.get('payment_status', 'check')),
-                    'confirmations': result.get('confirmations', cached_payment.get('confirmations', 0)),
-                    'transaction_hash': result.get('txid'),
+                    'status': self._convert_cryptomus_status(raw_status),
+                    'cryptomus_status': raw_status,
+                    'confirmations': updated_confirmations if updated_confirmations is not None else cached_payment.get('confirmations', 0),
+                    'required_confirmations': updated_required if updated_required is not None else cached_payment.get('required_confirmations'),
+                    'transaction_hash': result.get('txid') or cached_payment.get('transaction_hash'),
+                    'wallet_address': result.get('address') or cached_payment.get('wallet_address'),
+                    'address_qr_code': result.get('address_qr_code') or cached_payment.get('address_qr_code'),
+                    'network': result.get('network') or cached_payment.get('network'),
+                    'payment_url': result.get('url') or cached_payment.get('payment_url'),
+                    'expires_at': result.get('expired_at') or cached_payment.get('expires_at'),
+                    'payer_amount': result.get('payer_amount') or cached_payment.get('payer_amount'),
+                    'payer_currency': result.get('payer_currency') or cached_payment.get('payer_currency'),
+                    'payment_amount': result.get('payment_amount') or cached_payment.get('payment_amount'),
+                    'merchant_amount': result.get('merchant_amount') or cached_payment.get('merchant_amount'),
+                    'is_final': result.get('is_final') if result.get('is_final') is not None else cached_payment.get('is_final'),
                     'updated_at': datetime.utcnow().isoformat()
                 }
                 
@@ -273,7 +322,8 @@ class CryptoPaymentService:
         payment_id: str,
         status: str,
         transaction_hash: Optional[str] = None,
-        confirmations: int = 0
+        confirmations: Optional[int] = 0,
+        required_confirmations: Optional[int] = None
     ) -> Dict[str, Any]:
         """
         更新支付状态（通常由webhook触发）
@@ -293,13 +343,20 @@ class CryptoPaymentService:
         if self._is_final_status(payment.get('status', '')) and self._is_final_status(status) and status == payment.get('status'):
             return payment
         
+        parsed_confirmations = self._parse_int(confirmations) if confirmations is not None else None
+        parsed_required = self._parse_int(required_confirmations) if required_confirmations is not None else None
+        if parsed_confirmations is None:
+            parsed_confirmations = payment.get('confirmations', 0)
+
         # 更新状态
         payment.update({
             'status': status,
-            'confirmations': confirmations,
+            'confirmations': parsed_confirmations,
             'transaction_hash': transaction_hash,
             'updated_at': datetime.utcnow().isoformat()
         })
+        if parsed_required is not None:
+            payment['required_confirmations'] = parsed_required
         
         # 缓存更新
         await self._save_payment(payment_id, payment)
@@ -372,7 +429,7 @@ class CryptoPaymentService:
         async with get_cryptomus_client() as client:
             response = await client.get_services()
 
-        if response.get('state') not in (0, 1):
+        if response.get('state') not in (0, None):
             raise RuntimeError(response.get('message', 'Failed to fetch Cryptomus services'))
 
         services = response.get('result', [])
@@ -393,7 +450,12 @@ class CryptoPaymentService:
             currency_info = self.supported_currencies[currency_code]
             # 确定展示的网络名称
             display_network = service.get('network', currency_info['network'])
-            required_conf = 12 if network_code in {"ETH", "BSC"} else 1
+            service_required = self._parse_int(
+                service.get('required_confirmations')
+                or service.get('confirmations_required')
+                or service.get('confirmations')
+            )
+            required_conf = service_required if service_required is not None else (12 if network_code in {"ETH", "BSC"} else 1)
 
             currencies.append({
                 'code': currency_code,
@@ -416,16 +478,38 @@ class CryptoPaymentService:
     
     def _convert_cryptomus_status(self, cryptomus_status: str) -> str:
         """转换Cryptomus状态到标准状态"""
+        normalized_status = (cryptomus_status or '').lower()
         status_mapping = {
             'check': 'pending',
+            'process': 'pending',
+            'confirm_check': 'pending',
+            'wrong_amount_waiting': 'pending',
             'paid': 'confirmed',
             'paid_over': 'confirmed',
             'wrong_amount': 'failed',
             'wrong_currency': 'failed',
-            'expired': 'expired',
-            'cancelled': 'cancelled'
+            'fail': 'failed',
+            'system_fail': 'failed',
+            'refund_process': 'failed',
+            'refund_fail': 'failed',
+            'refund_paid': 'failed',
+            'locked': 'failed',
+            'cancel': 'cancelled',
+            'cancelled': 'cancelled',
+            'expired': 'expired'
         }
-        return status_mapping.get(cryptomus_status, 'pending')
+        return status_mapping.get(normalized_status, 'pending')
+
+    def _parse_int(self, value: Any) -> Optional[int]:
+        if value is None or value == '':
+            return None
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            try:
+                return int(float(str(value)))
+            except (TypeError, ValueError):
+                return None
     
     def _get_required_confirmations(self, currency: str) -> int:
         """获取所需确认数"""
@@ -459,16 +543,16 @@ class CryptoPaymentService:
         """
         return {code: self._get_mock_rate(code) for code in self.supported_currencies.keys()}
     
-    def verify_webhook_signature(self, raw_body: bytes, signature: str) -> bool:
+    def verify_webhook_signature(self, payload: Dict[str, Any], signature: str) -> bool:
         """
-        验证webhook签名（使用 payout/webhook key + 原始body）
+        Verify webhook signature from payload with payment API key.
         """
         if not self.use_cryptomus:
             return False
         
         try:
             client = get_cryptomus_client()
-            return client.verify_webhook_signature(raw_body, signature)
+            return client.verify_webhook_signature(payload, signature)
         except Exception as e:
             logger.error(f"Webhook signature verification failed: {str(e)}")
             return False

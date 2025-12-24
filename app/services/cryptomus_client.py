@@ -10,6 +10,7 @@ import logging
 import base64
 from typing import Dict, Optional, Any, List
 from decimal import Decimal
+from urllib.parse import quote
 import aiohttp
 from datetime import datetime
 
@@ -96,7 +97,10 @@ class CryptomusClient:
         Raises:
             Exception: 请求失败时抛出异常
         """
-        url = f"{self.base_url}/{endpoint}"
+        if endpoint.startswith("http://") or endpoint.startswith("https://"):
+            url = endpoint
+        else:
+            url = f"{self.base_url.rstrip('/')}/{endpoint.lstrip('/')}"
         headers = {
             'Content-Type': 'application/json',
             'merchant': self.merchant_uuid
@@ -126,10 +130,8 @@ class CryptomusClient:
                     raise Exception(f"Cryptomus API error: {error_msg}")
                 
                 # 检查业务状态
-                if response_data.get('state') == 0:
-                    if allow_state_zero and response_data.get('result') is not None:
-                        logger.warning(f"Cryptomus state=0 but returning result for {endpoint}")
-                        return response_data
+                state = response_data.get('state') if isinstance(response_data, dict) else None
+                if state is not None and state != 0:
                     error_msg = response_data.get('message') if isinstance(response_data, dict) else None
                     error_msg = error_msg or str(response_data)
                     logger.error(f"Cryptomus business error: {error_msg}")
@@ -195,8 +197,7 @@ class CryptomusClient:
         if to_currency:
             data['to_currency'] = to_currency
         
-        # 部分商户环境下创建支付可能返回 state=0 但附带完整 result，这里允许通过
-        return await self._make_request('POST', 'payment', data, allow_state_zero=True)
+        return await self._make_request('POST', 'payment', data)
     
     async def get_payment_info(self, payment_id: str = None, order_id: str = None) -> Dict[str, Any]:
         """
@@ -226,7 +227,8 @@ class CryptomusClient:
         order_id: str = None,
         status: str = None,
         start_date: str = None,
-        end_date: str = None
+        end_date: str = None,
+        cursor: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         获取支付历史
@@ -242,22 +244,17 @@ class CryptomusClient:
         Returns:
             支付历史列表
         """
-        data = {
-            'page': page,
-            'limit': limit
-        }
-        
-        # 添加可选参数
-        if order_id:
-            data['order_id'] = order_id
-        if status:
-            data['status'] = status
+        data = {}
         if start_date:
-            data['start_date'] = start_date
+            data['date_from'] = start_date
         if end_date:
-            data['end_date'] = end_date
-        
-        return await self._make_request('POST', 'payment/history', data)
+            data['date_to'] = end_date
+
+        endpoint = 'payment/list'
+        if cursor:
+            endpoint = f"payment/list?cursor={quote(cursor)}"
+
+        return await self._make_request('POST', endpoint, data)
     
     async def get_balance(self) -> Dict[str, Any]:
         """
@@ -286,16 +283,16 @@ class CryptomusClient:
         url_callback: str = None
     ) -> Dict[str, Any]:
         """
-        创建静态钱包
+        ??????
         
         Args:
-            currency: 货币类型
-            network: 网络
-            order_id: 订单ID
-            url_callback: 回调URL
+            currency: ????
+            network: ??
+            order_id: ??ID
+            url_callback: ??URL
             
         Returns:
-            静态钱包信息
+            ??????
         """
         data = {
             'currency': currency,
@@ -307,46 +304,60 @@ class CryptomusClient:
         if url_callback:
             data['url_callback'] = url_callback
         
-        return await self._make_request('POST', 'wallet/static', data)
+        return await self._make_request('POST', 'wallet', data)
     
     async def block_static_wallet(self, wallet_uuid: str) -> Dict[str, Any]:
         """
-        封锁静态钱包
+        ??????
         
         Args:
-            wallet_uuid: 钱包UUID
+            wallet_uuid: ??UUID
             
         Returns:
-            操作结果
+            ????
         """
         data = {'uuid': wallet_uuid}
-        return await self._make_request('POST', 'wallet/block', data)
+        return await self._make_request('POST', 'wallet/block-address', data)
     
     async def refund_payment(
         self,
-        payment_id: str,
+        payment_id: Optional[str] = None,
+        order_id: Optional[str] = None,
         amount: float = None,
-        address: str = None,
-        network: str = None
+        address: Optional[str] = None,
+        network: str = None,
+        is_subtract: bool = False
     ) -> Dict[str, Any]:
         """
-        退款支付
+        ????
         
         Args:
-            payment_id: 支付ID
-            amount: 退款金额
-            address: 退款地址
-            network: 网络
+            payment_id: ??ID
+            order_id: ??ID
+            amount: ????
+            address: ????
+            network: ??
+            is_subtract: ????????????
             
         Returns:
-            退款信息
+            ????
         """
-        data = {'uuid': payment_id}
+        if not payment_id and not order_id:
+            raise ValueError("Either payment_id or order_id must be provided")
+        if not address:
+            raise ValueError("Refund address must be provided")
+
+        data = {
+            'address': address,
+            'is_subtract': is_subtract
+        }
         
+        if payment_id:
+            data['uuid'] = payment_id
+        if order_id:
+            data['order_id'] = order_id
         if amount:
             data['amount'] = str(amount)
-        if address:
-            data['address'] = address
         if network:
             data['network'] = network
         
@@ -354,39 +365,59 @@ class CryptomusClient:
     
     async def resend_webhook(self, payment_id: str) -> Dict[str, Any]:
         """
-        重新发送webhook
+        ????webhook
         
         Args:
-            payment_id: 支付ID
+            payment_id: ??ID
             
         Returns:
-            操作结果
+            ????
         """
         data = {'uuid': payment_id}
-        return await self._make_request('POST', 'payment/webhook/resend', data)
+        root_url = self._get_api_root()
+        return await self._make_request('POST', f"{root_url}/v2/payment/resend", data)
     
     async def test_webhook(self, payment_id: str) -> Dict[str, Any]:
         """
-        测试webhook
+        ??webhook
         
         Args:
-            payment_id: 支付ID
+            payment_id: ??ID
             
         Returns:
-            测试结果
+            ????
         """
         data = {'uuid': payment_id}
-        return await self._make_request('POST', 'payment/webhook/test', data)
+        return await self._make_request('POST', 'test-webhook/payment', data)
+
+    def _get_api_root(self) -> str:
+        base_url = self.base_url.rstrip('/')
+        if base_url.endswith('/v1') or base_url.endswith('/v2'):
+            return base_url.rsplit('/', 1)[0]
+        return base_url
+
+    def _build_webhook_body(self, payload: Dict[str, Any]) -> bytes:
+        payload_data = dict(payload)
+        payload_data.pop('sign', None)
+        json_str = json.dumps(payload_data, separators=(',', ':'), ensure_ascii=False)
+        json_str = json_str.replace("/", "\\/")
+        return json_str.encode('utf-8')
     
-    def verify_webhook_signature(self, raw_body: bytes, signature: str) -> bool:
+    def verify_webhook_signature(self, payload: Dict[str, Any], signature: str) -> bool:
         """
-        验证 webhook 签名：使用 payout/webhook key + base64(raw_body) 做 HMAC-SHA256。
+        Verify webhook signature from body payload and payment API key.
         """
         try:
-            key = settings.CRYPTOMUS_PAYOUT_KEY or settings.CRYPTOMUS_API_KEY
-            if not key:
-                logger.error("CRYPTOMUS_PAYOUT_KEY missing, cannot verify webhook")
+            if not signature:
                 return False
+            if not isinstance(payload, dict):
+                logger.error("Webhook payload must be a dict")
+                return False
+            key = settings.CRYPTOMUS_API_KEY
+            if not key:
+                logger.error("CRYPTOMUS_API_KEY missing, cannot verify webhook")
+                return False
+            raw_body = self._build_webhook_body(payload)
             expected_signature = self._generate_signature(raw_body, key)
             return hmac.compare_digest(expected_signature, signature)
         except Exception as e:
@@ -394,31 +425,31 @@ class CryptomusClient:
             return False
 
 
-# 全局客户端实例
+# ???????
 def get_cryptomus_client() -> CryptomusClient:
-    """获取Cryptomus客户端实例"""
+    """??Cryptomus?????"""
     return CryptomusClient()
 
 
-# 便捷函数
+# ????
 async def create_cryptomus_payment(
     amount: float,
     currency: str = "USD",
     order_id: str = None,
     **kwargs
 ) -> Dict[str, Any]:
-    """便捷函数：创建Cryptomus支付"""
+    """???????Cryptomus??"""
     async with get_cryptomus_client() as client:
         return await client.create_payment(amount, currency, order_id, **kwargs)
 
 
 async def get_cryptomus_payment_info(payment_id: str = None, order_id: str = None) -> Dict[str, Any]:
-    """便捷函数：获取Cryptomus支付信息"""
+    """???????Cryptomus????"""
     async with get_cryptomus_client() as client:
         return await client.get_payment_info(payment_id, order_id)
 
 
 async def get_cryptomus_balance() -> Dict[str, Any]:
-    """便捷函数：获取Cryptomus余额"""
+    """???????Cryptomus??"""
     async with get_cryptomus_client() as client:
         return await client.get_balance()

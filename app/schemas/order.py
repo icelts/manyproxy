@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from datetime import datetime
 from decimal import Decimal
 from app.models.order import OrderType, OrderStatus, PaymentMethod, CryptoCurrency
@@ -149,6 +149,7 @@ class RechargeResponse(BaseModel):
     order: OrderResponse
     payment: PaymentResponse
     qr_code: Optional[str] = None  # 二维码数据
+    crypto_payment: Optional[Dict[str, Any]] = None
 
 
 # 支付回调Schema

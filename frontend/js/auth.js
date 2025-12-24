@@ -189,6 +189,13 @@ class SessionController {
             this.setState(envelope);
             return envelope;
         } catch (error) {
+            const status = error?.status;
+            const detail =
+                (error?.response && error.response.detail) || error?.message || '';
+            if (status === 401 || /invalid token|not authenticated/i.test(detail)) {
+                this.clearState();
+                return null;
+            }
             console.warn('Session state refresh failed, but keeping token:', error);
             // 如果session state失败，但token存在，创建一个基本的session state
             const username = this.storage.getItem('username');

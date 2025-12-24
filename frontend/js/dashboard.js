@@ -16,7 +16,7 @@ class DashboardManager {
                 labels: this.getProxyLabels(),
                 datasets: [{
                     data: [0, 0, 0],
-                    backgroundColor: ['#0d6efd', '#198754', '#ffc107'],
+                    backgroundColor: ['#0f766e', '#0ea5e9', '#f59e0b'],
                     borderWidth: 2,
                     borderColor: '#fff'
                 }]

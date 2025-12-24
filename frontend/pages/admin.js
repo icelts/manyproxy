@@ -700,10 +700,10 @@ class AdminPage {
                         stats.cancelled_orders
                     ],
                     backgroundColor: [
-                        '#FF6384',
-                        '#36A2EB',
-                        '#FFCE56',
-                        '#4BC0C0'
+                        '#f59e0b',
+                        '#0f766e',
+                        '#10b981',
+                        '#ef4444'
                     ]
                 }]
             },
@@ -737,9 +737,9 @@ class AdminPage {
                         stats.success_rate
                     ],
                     backgroundColor: [
-                        '#36A2EB',
-                        '#FF6384',
-                        '#4BC0C0'
+                        '#0f766e',
+                        '#0ea5e9',
+                        '#f59e0b'
                     ]
                 }]
             },
